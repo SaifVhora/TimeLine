@@ -3935,6 +3935,2153 @@ function copy(text, ping) {
 
 /* ═════════════ mount ═════════════ */
 
+/* ══════════ v2 patch layer: types, lanes, month focus, export, editor ══════════ */
+
+const DownloadIc = ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>');
+const TagIc = ic('<path d="M12 2l8 8-10 10-8-8V4a2 2 0 0 1 2-2h8z"/><circle cx="7.5" cy="7.5" r="1.5"/>');
+
+/* new type system — VC / Channel / Server / Other, with legacy mapping */
+TYPES.length = 0;
+TYPES.push({
+  id: "vc",
+  label: "VC event",
+  short: "VC",
+  color: "#8B7BFF"
+}, {
+  id: "channel",
+  label: "Channel event",
+  short: "CHANNEL",
+  color: "#35D6C0"
+}, {
+  id: "server",
+  label: "Server event",
+  short: "SERVER",
+  color: "#E8C87A"
+}, {
+  id: "other",
+  label: "Other",
+  short: "EVENT",
+  color: "#8B93AD"
+});
+const OLD_TYPE = {
+  lltvc: "vc",
+  karaoke: "vc",
+  gtac: "channel",
+  chart: "channel",
+  auction: "server"
+};
+function resolveType(ev) {
+  const id = OLD_TYPE[ev.type] || ev.type || "other";
+  return TYPES.find(t => t.id === id) || TYPES[3];
+}
+function evLabel(ev) {
+  return ev.label && ev.label.trim() || resolveType(ev).label;
+}
+function evShort(ev) {
+  return (ev.label && ev.label.trim() || resolveType(ev).short).toUpperCase();
+}
+function evBaseColor(ev) {
+  return ev.color || resolveType(ev).color;
+}
+function evHosts(ev) {
+  if (Array.isArray(ev.hosts)) return ev.hosts.filter(Boolean);
+  return ev.host ? String(ev.host).split(/,\s*/).filter(Boolean) : [];
+}
+const fmtD = t => new Date(t).toLocaleDateString(undefined, {
+  day: "numeric",
+  month: "short"
+});
+function evRange(ev) {
+  const s = new Date(ev.start).getTime();
+  const e = s + (ev.durationMin || 90) * MIN;
+  return sameDay(s, e - MIN) ? fmtD(s) : fmtD(s) + " → " + fmtD(e);
+}
+const PALETTE = ["#8B7BFF", "#35D6C0", "#E8C87A", "#FF9F6B", "#FF7BD5", "#6BE3B8", "#7BC5FF", "#FF7285"];
+const kindFromType = {
+  vc: "voice",
+  channel: "text",
+  server: "other",
+  other: "other"
+};
+
+/* ══════════ multi-host input ══════════ */
+function HostsInput({
+  value,
+  onChange,
+  names
+}) {
+  const T = useT();
+  const input = useInput();
+  const [q, setQ] = useState("");
+  const [focus, setFocus] = useState(false);
+  const list = value || [];
+  const add = n => {
+    const v = (n || "").trim();
+    if (!v) return;
+    if (!list.includes(v)) onChange([...list, v]);
+    setQ("");
+  };
+  const matches = (names || []).filter(n => n && !list.includes("@" + n) && n.toLowerCase().includes(q.toLowerCase())).slice(0, 5);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "relative"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-1.5 p-2 rounded-[10px]",
+    style: {
+      background: T.field,
+      border: `1px solid ${T.hair}`,
+      minHeight: 44
+    }
+  }, list.map(hst => /*#__PURE__*/React.createElement("span", {
+    key: hst,
+    className: "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`,
+      color: T.text
+    }
+  }, (names || []).includes(hst.replace(/^@/, "")) && /*#__PURE__*/React.createElement(BadgeCheck, {
+    size: 10,
+    style: {
+      color: T.gold
+    }
+  }), hst, /*#__PURE__*/React.createElement("button", {
+    onClick: () => onChange(list.filter(x => x !== hst)),
+    style: {
+      background: "none",
+      border: "none",
+      color: T.muted,
+      cursor: "pointer",
+      padding: 0,
+      marginLeft: 2
+    }
+  }, /*#__PURE__*/React.createElement(XIcon, {
+    size: 10
+  })))), /*#__PURE__*/React.createElement("input", {
+    value: q,
+    onFocus: () => setFocus(true),
+    onBlur: () => setTimeout(() => setFocus(false), 150),
+    onChange: e => setQ(e.target.value),
+    onKeyDown: e => {
+      if ((e.key === "Enter" || e.key === ",") && q.trim()) {
+        e.preventDefault();
+        add(q.replace(/,/g, ""));
+      }
+      if (e.key === "Backspace" && !q && list.length) onChange(list.slice(0, -1));
+    },
+    placeholder: list.length ? "" : "Add hosts — type a name, Enter to add",
+    style: {
+      flex: 1,
+      minWidth: 120,
+      background: "none",
+      border: "none",
+      outline: "none",
+      color: T.text,
+      fontFamily: BODY,
+      fontSize: 14
+    }
+  })), focus && q && matches.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "absolute left-0 right-0 z-10 mt-1 rounded-lg overflow-hidden",
+    style: {
+      background: T.sheet,
+      border: `1px solid ${T.hair}`,
+      boxShadow: "0 10px 30px rgba(0,0,0,.3)"
+    }
+  }, matches.map(n => /*#__PURE__*/React.createElement("button", {
+    key: n,
+    onMouseDown: e => {
+      e.preventDefault();
+      add("@" + n);
+    },
+    className: "w-full text-left px-3 py-2 text-sm flex items-center gap-2",
+    style: {
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      color: T.text,
+      fontFamily: BODY
+    }
+  }, /*#__PURE__*/React.createElement(BadgeCheck, {
+    size: 12,
+    style: {
+      color: T.gold
+    }
+  }), " @", n, /*#__PURE__*/React.createElement("span", {
+    className: "ml-auto",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      color: T.muted,
+      letterSpacing: "0.1em"
+    }
+  }, "REGISTERED")))));
+}
+
+/* ══════════ toggle + day-only picker ══════════ */
+function Toggle({
+  on,
+  onChange,
+  label
+}) {
+  const T = useT();
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: () => onChange(!on),
+    className: "flex items-center gap-2.5",
+    style: {
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 34,
+      height: 20,
+      borderRadius: 20,
+      position: "relative",
+      transition: "background .2s",
+      background: on ? T.gold : T.hair
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: "absolute",
+      top: 2,
+      left: on ? 16 : 2,
+      width: 16,
+      height: 16,
+      borderRadius: 16,
+      background: on ? T.solidInk === "#FFFFFF" ? "#fff" : "#04060D" : T.muted,
+      transition: "left .2s"
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "text-sm",
+    style: {
+      color: T.text,
+      fontFamily: BODY
+    }
+  }, label));
+}
+function DayPick({
+  value,
+  onPick
+}) {
+  const T = useT();
+  const d = new Date(value);
+  const [view, setView] = useState(() => {
+    const v = new Date(value);
+    v.setDate(1);
+    return v;
+  });
+  useEffect(() => {
+    const v = new Date(value);
+    v.setDate(1);
+    setView(v);
+  }, [value]);
+  const grid = useMemo(() => {
+    const first = new Date(view.getFullYear(), view.getMonth(), 1);
+    const pad = (first.getDay() + 6) % 7;
+    const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < pad; i++) cells.push(null);
+    for (let i = 1; i <= days; i++) cells.push(new Date(view.getFullYear(), view.getMonth(), i));
+    return cells;
+  }, [view]);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "rounded-xl p-3",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1)),
+    style: {
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(ChevronLeft, {
+    size: 16
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      letterSpacing: "0.14em"
+    }
+  }, view.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric"
+  }).toUpperCase()), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1)),
+    style: {
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 16
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-7 gap-1 mb-1"
+  }, ["M", "T", "W", "T", "F", "S", "S"].map((w, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "text-center",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      color: T.muted
+    }
+  }, w))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-7 gap-1"
+  }, grid.map((c, i) => {
+    if (!c) return /*#__PURE__*/React.createElement("div", {
+      key: i
+    });
+    const sel = sameDay(c, d),
+      today = sameDay(c, new Date());
+    return /*#__PURE__*/React.createElement("button", {
+      key: i,
+      onClick: () => onPick(c.getFullYear(), c.getMonth(), c.getDate()),
+      className: "aspect-square rounded-md",
+      style: {
+        fontFamily: MONO,
+        fontSize: 11,
+        background: sel ? T.solidBtn : "transparent",
+        cursor: "pointer",
+        color: sel ? T.solidInk : today ? T.gold : T.body,
+        border: `1px solid ${sel ? "transparent" : today ? T.gold + "66" : "transparent"}`
+      }
+    }, c.getDate());
+  })));
+}
+
+/* ══════════ PNG export ══════════ */
+function exportMonthPNG({
+  serverName,
+  monthStart,
+  monthEnd,
+  events,
+  T,
+  now
+}) {
+  const days = Math.round((monthEnd - monthStart) / DAY);
+  const PPD = 110,
+    PADL = 140;
+  const W = days * PPD + PADL * 2,
+    H = 900,
+    LY = Math.round(H * 0.56);
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d");
+  const dark = T.solidInk !== "#FFFFFF" ? false : true; /* solidInk white => dark theme */
+  const bgA = dark ? "#0B1224" : "#FFFFFF",
+    bgB = dark ? "#04060D" : "#F1F3FB";
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, bgA);
+  grad.addColorStop(1, bgB);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  let seed = 777;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  for (let i = 0; i < Math.min(600, W / 6); i++) {
+    g.globalAlpha = rnd() * 0.5 + 0.1;
+    g.fillStyle = dark ? "#fff" : "#5B6BFF";
+    const r = rnd() * 1.6 + 0.4;
+    g.beginPath();
+    g.arc(rnd() * W, rnd() * H, r, 0, 7);
+    g.fill();
+  }
+  g.globalAlpha = 1;
+  const mName = new Date(monthStart).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric"
+  });
+  g.fillStyle = T.text;
+  g.font = "500 58px Marcellus, Georgia, serif";
+  g.textBaseline = "top";
+  g.fillText(mName, 60, 48);
+  g.fillStyle = T.muted;
+  g.font = "500 17px 'JetBrains Mono', monospace";
+  g.fillText((serverName || "EVENTS TIMELINE").toUpperCase() + " · EVENTS TIMELINE", 62, 118);
+  const xOf = t => PADL + (t - monthStart) / DAY * PPD;
+  /* day ticks */
+  for (let i = 0; i <= days; i++) {
+    const x = PADL + i * PPD;
+    g.strokeStyle = dark ? "rgba(195,206,227,.32)" : "rgba(120,130,160,.4)";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(x, LY - 12);
+    g.lineTo(x, LY + 12);
+    g.stroke();
+    if (i < days) {
+      g.fillStyle = T.muted;
+      g.font = "500 14px 'JetBrains Mono', monospace";
+      g.textAlign = "center";
+      g.fillText(String(i + 1).padStart(2, "0"), x + PPD / 2, LY + 26);
+    }
+  }
+  g.textAlign = "left";
+  /* the line with glow */
+  g.save();
+  g.shadowColor = T.current;
+  g.shadowBlur = 26;
+  g.strokeStyle = T.current;
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(30, LY);
+  g.lineTo(W - 30, LY);
+  g.stroke();
+  g.restore();
+  /* spans */
+  const items = events.filter(e => {
+    const s = new Date(e.start).getTime();
+    const en = s + (e.durationMin || 90) * MIN;
+    return en > monthStart && s < monthEnd;
+  }).sort((a, b) => new Date(a.start) - new Date(b.start));
+  const laneEnds = [];
+  const OFFS = [-16, 16, -28, 28, -40, 40];
+  items.forEach(ev => {
+    const s = Math.max(monthStart, new Date(ev.start).getTime());
+    const en = Math.min(monthEnd, new Date(ev.start).getTime() + (ev.durationMin || 90) * MIN);
+    const x1 = xOf(s),
+      x2 = xOf(en);
+    if (x2 - x1 < 18) return;
+    let lane = laneEnds.findIndex(e2 => e2 <= x1 - 8);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = x2;
+    const off = OFFS[lane % OFFS.length];
+    const col = evBaseColor(ev);
+    g.save();
+    g.shadowColor = col;
+    g.shadowBlur = 14;
+    g.fillStyle = col;
+    g.globalAlpha = 0.85;
+    g.beginPath();
+    g.roundRect(x1, LY + off - 4, x2 - x1, 8, 6);
+    g.fill();
+    g.restore();
+    g.globalAlpha = 1;
+  });
+  /* nodes + card text with side lanes */
+  const sides = {
+    top: [],
+    bot: []
+  };
+  const CARDW = 235,
+    LINEH = 21;
+  g.textBaseline = "top";
+  items.forEach(ev => {
+    const x = xOf(Math.max(monthStart, new Date(ev.start).getTime()));
+    const order = [["top", 0], ["bot", 0], ["top", 1], ["bot", 1], ["top", 2], ["bot", 2]];
+    let side = "top",
+      lane = 0;
+    for (const [sd, ln] of order) {
+      if ((sides[sd][ln] ?? -1e9) <= x - CARDW) {
+        side = sd;
+        lane = ln;
+        break;
+      }
+    }
+    sides[side][lane] = x + CARDW;
+    const armBase = 96,
+      cardH = 120;
+    const arm = armBase + lane * (cardH + 16);
+    const col = evBaseColor(ev);
+    const up = side === "top";
+    /* arm */
+    g.strokeStyle = col;
+    g.globalAlpha = 0.7;
+    g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(x, LY);
+    g.lineTo(x, up ? LY - arm : LY + arm);
+    g.stroke();
+    g.globalAlpha = 1;
+    /* diamond */
+    g.save();
+    g.translate(x, LY);
+    g.rotate(Math.PI / 4);
+    g.shadowColor = col;
+    g.shadowBlur = 16;
+    g.fillStyle = col;
+    g.fillRect(-6, -6, 12, 12);
+    g.restore();
+    /* card */
+    let ty = up ? LY - arm - cardH : LY + arm + 8;
+    g.fillStyle = col;
+    g.font = "500 13px 'JetBrains Mono', monospace";
+    const hd = evShort(ev) + (ev.allDay ? " · ALL DAY" : " · " + fmtTime(ev.start));
+    g.fillText(hd.slice(0, 30), x + 12, ty);
+    ty += LINEH;
+    g.fillStyle = T.text;
+    g.font = "500 21px Marcellus, Georgia, serif";
+    const title = ev.title || "Untitled";
+    g.fillText(title.length > 22 ? title.slice(0, 21) + "…" : title, x + 12, ty);
+    ty += LINEH + 8;
+    g.fillStyle = T.muted;
+    g.font = "500 13px 'JetBrains Mono', monospace";
+    g.fillText(evRange(ev), x + 12, ty);
+    ty += LINEH - 3;
+    const hosts = evHosts(ev);
+    if (hosts.length) {
+      g.fillText(("BY " + hosts.join(", ")).slice(0, 30), x + 12, ty);
+      ty += LINEH - 3;
+    }
+    const win = (ev.winners || []).find(w => w.name);
+    if (win) {
+      g.fillStyle = T.gold;
+      g.fillText(("01 " + win.name).slice(0, 28), x + 12, ty);
+    }
+  });
+  /* now marker */
+  if (now >= monthStart && now <= monthEnd) {
+    const x = xOf(now);
+    g.strokeStyle = T.gold;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(x, LY - 70);
+    g.lineTo(x, LY + 70);
+    g.stroke();
+    g.fillStyle = T.gold;
+    g.font = "500 13px 'JetBrains Mono', monospace";
+    g.fillText("NOW", x + 8, LY - 86);
+    g.beginPath();
+    g.arc(x, LY, 5, 0, 7);
+    g.fill();
+  }
+  g.fillStyle = T.muted;
+  g.font = "500 13px 'JetBrains Mono', monospace";
+  g.textAlign = "right";
+  g.fillText("EVENTS TIMELINE ✦", W - 40, H - 44);
+  g.textAlign = "left";
+  const slug = (mName + "-" + (serverName || "timeline")).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  c.toBlob(b => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = slug + ".png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+}
+
+/* ══════════ Line v2: card lanes, month focus, export ══════════ */
+function Line({
+  events,
+  now,
+  zoom,
+  onOpen,
+  empty,
+  canCreate,
+  onAdd,
+  serverName
+}) {
+  const T = useT();
+  const scroller = useRef(null);
+  const starLayer = useRef(null);
+  const wrap = useRef(null);
+  const [size, setSize] = useState({
+    w: 900,
+    h: 480
+  });
+  const [hover, setHover] = useState(null);
+  const [monthLabel, setMonthLabel] = useState("");
+  const [focus, setFocus] = useState(null); /* {start,end,label} month zoom */
+  const drag = useRef({
+    on: false,
+    x: 0,
+    left: 0,
+    moved: 0
+  });
+  const centered = useRef(false);
+  useEffect(() => {
+    if (!wrap.current) return;
+    const ro = new ResizeObserver(entries => {
+      const r = entries[0].contentRect;
+      setSize({
+        w: Math.max(320, r.width),
+        h: Math.max(360, r.height)
+      });
+    });
+    ro.observe(wrap.current);
+    return () => ro.disconnect();
+  }, []);
+  const H = size.h;
+  const lineY = Math.round(H * 0.52);
+  const compact = H < 470;
+  const ARM = compact ? 44 : 60;
+  const CARDH = compact ? 92 : 112;
+  const CARDW = 156;
+  const padX = focus ? 70 : PAD_X;
+  const range = useMemo(() => {
+    if (focus) return {
+      start: focus.start,
+      end: focus.end
+    };
+    const ts = events.map(e => new Date(e.start).getTime());
+    const te = events.map(e => new Date(e.start).getTime() + (e.durationMin || 90) * MIN);
+    const min = Math.min(now, ...(ts.length ? ts : [now]));
+    const max = Math.max(now, ...(te.length ? te : [now]));
+    return {
+      start: startOfDay(min - 4 * DAY),
+      end: max + 8 * DAY
+    };
+  }, [events, now, focus]);
+  const Z = focus ? Math.max(10, (size.w - padX * 2) / ((range.end - range.start) / DAY)) : zoom;
+  const xOf = useCallback(t => (new Date(t).getTime() - range.start) / DAY * Z + padX, [range, Z, padX]);
+  const tOf = useCallback(x => range.start + (x - padX) / Z * DAY, [range, Z, padX]);
+  const width = focus ? size.w : Math.max(xOf(range.end) + padX, size.w + 100);
+
+  /* nodes with anti-overlap card lanes: try near lanes first, spill outward */
+  const nodes = useMemo(() => {
+    const sorted = [...events].sort((a, b) => new Date(a.start) - new Date(b.start));
+    const sides = {
+      top: [],
+      bot: []
+    };
+    return sorted.map(ev => {
+      const x = xOf(ev.start);
+      const x2 = xOf(new Date(ev.start).getTime() + (ev.durationMin || 90) * MIN);
+      const order = [["top", 0], ["bot", 0], ["top", 1], ["bot", 1], ["top", 2], ["bot", 2]];
+      let side = "top",
+        lane = 0,
+        placed = false;
+      for (const [sd, ln] of order) {
+        if ((sides[sd][ln] ?? -1e9) <= x - CARDW) {
+          side = sd;
+          lane = ln;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        side = sides.top.length <= sides.bot.length ? "top" : "bot";
+        lane = sides[side].length;
+      }
+      sides[side][lane] = x + CARDW;
+      return {
+        ev,
+        x,
+        x2,
+        side,
+        lane
+      };
+    });
+  }, [events, xOf, CARDW]);
+  const spans = useMemo(() => {
+    const laneEnds = [];
+    const OFF = [-11, 11, -19, 19, -27, 27, -35, 35];
+    return nodes.filter(n => n.x2 - n.x >= 16).map(n => {
+      let lane = laneEnds.findIndex(e => e <= n.x - 6);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(0);
+      }
+      laneEnds[lane] = n.x2;
+      return {
+        ...n,
+        off: OFF[lane % OFF.length]
+      };
+    });
+  }, [nodes]);
+  const months = useMemo(() => {
+    const out = [];
+    const d = new Date(range.start);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    while (d.getTime() < range.end) {
+      const t = d.getTime();
+      const nx = new Date(d);
+      nx.setMonth(nx.getMonth() + 1);
+      out.push({
+        t,
+        end: nx.getTime(),
+        label: d.toLocaleDateString(undefined, {
+          month: "long"
+        }),
+        year: d.getFullYear()
+      });
+      d.setMonth(d.getMonth() + 1);
+    }
+    return out;
+  }, [range]);
+  const ticks = useMemo(() => {
+    const step = Z >= 40 ? 1 : Z >= 14 ? 2 : 7;
+    const out = [];
+    for (let t = range.start; t < range.end; t += step * DAY) out.push(t);
+    return out;
+  }, [range, Z]);
+  useEffect(() => {
+    if (!scroller.current) return;
+    if (focus) {
+      scroller.current.scrollLeft = 0;
+      return;
+    }
+    if (centered.current) return;
+    scroller.current.scrollLeft = xOf(now) - scroller.current.clientWidth / 2;
+    centered.current = true;
+  }, [xOf, now, focus]);
+  const onScroll = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    if (starLayer.current) starLayer.current.style.transform = `translateX(${el.scrollLeft * 0.55}px)`;
+    const d = new Date(tOf(el.scrollLeft + el.clientWidth / 2));
+    setMonthLabel(`${d.toLocaleDateString(undefined, {
+      month: "long"
+    })} ${d.getFullYear()}`);
+  }, [tOf]);
+  useEffect(() => {
+    onScroll();
+  }, [onScroll, Z, focus]);
+  const onMove = e => {
+    const el = scroller.current;
+    if (!el) return;
+    if (e.pointerType !== "mouse") return;
+    if (drag.current.on) {
+      const dx = e.clientX - drag.current.x;
+      drag.current.moved = Math.max(drag.current.moved, Math.abs(dx));
+      el.scrollLeft = drag.current.left - dx;
+    }
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left + el.scrollLeft;
+    setHover(Math.abs(e.clientY - rect.top - lineY) < ARM + 30 ? {
+      x,
+      t: tOf(x)
+    } : null);
+  };
+  const doExport = () => {
+    let mStart, mEnd;
+    if (focus) {
+      mStart = focus.start;
+      mEnd = focus.end;
+    } else {
+      const el = scroller.current;
+      const center = new Date(tOf(el ? el.scrollLeft + el.clientWidth / 2 : 0));
+      const s = new Date(center.getFullYear(), center.getMonth(), 1);
+      const e = new Date(center.getFullYear(), center.getMonth() + 1, 1);
+      mStart = s.getTime();
+      mEnd = e.getTime();
+    }
+    exportMonthPNG({
+      serverName,
+      monthStart: mStart,
+      monthEnd: mEnd,
+      events,
+      T,
+      now
+    });
+  };
+  const gateTop = Math.max(14, lineY - ARM - CARDH - 26);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-h-0 flex flex-col relative"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "shrink-0 px-4 sm:px-7 pt-3 pb-1 flex items-end gap-3 flex-wrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: compact ? 22 : 28,
+      letterSpacing: "0.03em",
+      lineHeight: 1
+    }
+  }, focus ? `${focus.label} ${focus.year}` : monthLabel), focus ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFocus(null),
+    className: "mb-1 inline-flex items-center gap-1.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9.5,
+      letterSpacing: "0.16em",
+      color: T.gold,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(ArrowLeft, {
+    size: 11
+  }), " FULL LINE") : /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      const el = scroller.current;
+      if (el) el.scrollTo({
+        left: xOf(Date.now()) - el.clientWidth / 2,
+        behavior: "smooth"
+      });
+    },
+    className: "mb-1 inline-flex items-center gap-1.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9.5,
+      letterSpacing: "0.16em",
+      color: T.gold,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(Crosshair, {
+    size: 11
+  }), " JUMP TO NOW"), /*#__PURE__*/React.createElement("button", {
+    onClick: doExport,
+    className: "mb-1 inline-flex items-center gap-1.5 ml-auto",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9.5,
+      letterSpacing: "0.16em",
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(DownloadIc, {
+    size: 11
+  }), " EXPORT PNG")), /*#__PURE__*/React.createElement("div", {
+    ref: wrap,
+    className: "flex-1 min-h-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    ref: scroller,
+    className: "scroller h-full overflow-y-hidden",
+    style: {
+      cursor: focus ? "default" : "grab",
+      touchAction: "pan-x",
+      overflowX: focus ? "hidden" : "auto"
+    },
+    onWheel: e => {
+      if (focus) return;
+      const el = scroller.current;
+      if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY;
+    },
+    onScroll: onScroll,
+    onPointerDown: e => {
+      if (!focus && e.pointerType === "mouse") drag.current = {
+        on: true,
+        x: e.clientX,
+        left: scroller.current.scrollLeft,
+        moved: 0
+      };
+    },
+    onPointerUp: () => {
+      drag.current.on = false;
+    },
+    onPointerLeave: () => {
+      drag.current.on = false;
+      setHover(null);
+    },
+    onPointerMove: onMove
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "relative h-full",
+    style: {
+      width
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    ref: starLayer,
+    className: "absolute inset-0",
+    style: {
+      willChange: "transform"
+    }
+  }, /*#__PURE__*/React.createElement(Stars, {
+    width: width,
+    height: H,
+    T: T
+  })), months.map(m => /*#__PURE__*/React.createElement("div", {
+    key: m.t,
+    className: "absolute",
+    style: {
+      left: xOf(Math.max(m.t, range.start)),
+      top: gateTop
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 1,
+      height: lineY - gateTop,
+      background: `linear-gradient(180deg, transparent, ${T.hair})`
+    }
+  }), !focus && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (drag.current.moved < 6) setFocus({
+        start: m.t,
+        end: m.end,
+        label: m.label,
+        year: m.year
+      });
+    },
+    className: "absolute whitespace-nowrap",
+    style: {
+      left: 10,
+      top: 0,
+      fontFamily: DISPLAY,
+      fontSize: 15,
+      color: T.muted,
+      letterSpacing: "0.06em",
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: 0
+    }
+  }, m.label, " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 9
+    }
+  }, m.year), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 8,
+      color: T.gold,
+      marginLeft: 6,
+      letterSpacing: "0.1em"
+    }
+  }, "ZOOM")))), ticks.map(t => {
+    const major = new Date(t).getDay() === 1;
+    return /*#__PURE__*/React.createElement(React.Fragment, {
+      key: t
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "absolute",
+      style: {
+        left: xOf(t),
+        top: lineY - (major ? 16 : 9),
+        width: 1,
+        height: major ? 32 : 18,
+        background: `linear-gradient(180deg, transparent, ${T.silver}, transparent)`,
+        opacity: major ? 0.55 : 0.28
+      }
+    }), focus && /*#__PURE__*/React.createElement("div", {
+      className: "absolute",
+      style: {
+        left: xOf(t) + Z / 2,
+        top: lineY + 20,
+        transform: "translateX(-50%)",
+        fontFamily: MONO,
+        fontSize: 8.5,
+        color: T.muted
+      }
+    }, new Date(t).getDate()));
+  }), spans.map(({
+    ev,
+    x,
+    x2,
+    off
+  }) => {
+    const s = statusOf(ev, now);
+    const c = s === "past" ? T.silver : evBaseColor(ev);
+    return /*#__PURE__*/React.createElement(React.Fragment, {
+      key: "span" + ev.id
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "absolute",
+      style: {
+        left: x,
+        top: off < 0 ? lineY + off : lineY,
+        width: 1,
+        height: Math.abs(off),
+        background: c,
+        opacity: 0.45,
+        pointerEvents: "none"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      className: s === "live" ? "breathe" : "",
+      style: {
+        position: "absolute",
+        left: x,
+        top: lineY + off - 2.5,
+        width: Math.max(4, x2 - x),
+        height: 5,
+        borderRadius: 5,
+        pointerEvents: "none",
+        background: `linear-gradient(90deg, ${c}, ${c}33)`,
+        boxShadow: s === "past" ? "none" : `0 0 12px ${c}66`,
+        opacity: s === "past" ? 0.4 : 0.9
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: x2 - 1,
+        top: lineY + off - 5.5,
+        width: 1.5,
+        height: 11,
+        background: c,
+        opacity: 0.85,
+        pointerEvents: "none"
+      }
+    }));
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "draw absolute",
+    style: {
+      left: 0,
+      right: 0,
+      top: lineY - 1,
+      height: 2,
+      borderRadius: 2,
+      background: `${T.current}33`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "draw flame absolute",
+    style: {
+      left: 0,
+      right: 0,
+      top: lineY - 1.5,
+      height: 3,
+      borderRadius: 3,
+      boxShadow: `0 0 10px ${T.current}, 0 0 30px ${T.bloom}, 0 0 60px ${T.bloom}`
+    }
+  }), [0, 2.3, 4.6].map((delay, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "absolute ember",
+    style: {
+      left: padX + i * 280,
+      top: lineY - 1,
+      width: 3,
+      height: 3,
+      borderRadius: 3,
+      background: T.current,
+      boxShadow: `0 0 8px ${T.current}`,
+      animationDelay: `${delay}s`,
+      pointerEvents: "none"
+    }
+  })), now >= range.start && now <= range.end && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "absolute",
+    style: {
+      left: xOf(now),
+      top: lineY - ARM - 8,
+      width: 1,
+      height: (ARM + 8) * 2,
+      background: `linear-gradient(180deg, transparent, ${T.gold}, transparent)`,
+      opacity: 0.8
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute breathe",
+    style: {
+      left: xOf(now) - 4,
+      top: lineY - 4,
+      width: 8,
+      height: 8,
+      borderRadius: 8,
+      background: T.gold,
+      boxShadow: `0 0 14px ${T.gold}`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute whitespace-nowrap",
+    style: {
+      left: xOf(now) + 10,
+      top: lineY - ARM - 16,
+      fontFamily: MONO,
+      fontSize: 9,
+      letterSpacing: "0.2em",
+      color: T.gold
+    }
+  }, "NOW")), hover && !focus && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "absolute",
+    style: {
+      left: hover.x,
+      top: lineY - ARM + 20,
+      width: 1,
+      height: (ARM - 20) * 2,
+      pointerEvents: "none",
+      background: `linear-gradient(180deg, transparent, ${T.current}88, transparent)`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute whitespace-nowrap px-2 py-1",
+    style: {
+      left: hover.x + 8,
+      top: lineY + 30,
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.text,
+      background: T.sheet,
+      border: `1px solid ${T.hair}`,
+      borderRadius: 6,
+      pointerEvents: "none"
+    }
+  }, fmtDay(hover.t))), nodes.map(({
+    ev,
+    x,
+    side,
+    lane
+  }) => /*#__PURE__*/React.createElement(TimelineNode, {
+    key: ev.id,
+    ev: ev,
+    x: x,
+    up: side === "top",
+    now: now,
+    lineY: lineY,
+    arm: ARM + lane * (CARDH + 14),
+    card: CARDH,
+    onOpen: () => {
+      if (drag.current.moved < 6) onOpen(ev);
+    }
+  })), empty && !focus && /*#__PURE__*/React.createElement("div", {
+    className: "absolute text-center",
+    style: {
+      left: xOf(now) - 150,
+      top: lineY + ARM + 8,
+      width: 300
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 17
+    }
+  }, "This line is quiet"), /*#__PURE__*/React.createElement("p", {
+    className: "mt-1.5 mb-4 text-sm",
+    style: {
+      color: T.muted
+    }
+  }, "Add an event and it lights up here."), canCreate && /*#__PURE__*/React.createElement(Btn, {
+    tone: "gold",
+    onClick: onAdd
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 13
+  }), " Add the first event")), focus && nodes.length === 0 && /*#__PURE__*/React.createElement("div", {
+    className: "absolute text-center",
+    style: {
+      left: "50%",
+      transform: "translateX(-50%)",
+      top: lineY + ARM + 8,
+      width: 300
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 17
+    }
+  }, "Nothing happened in ", focus.label))))), /*#__PURE__*/React.createElement("div", {
+    className: "shrink-0 px-4 sm:px-7 py-1.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      color: T.muted,
+      letterSpacing: "0.14em"
+    }
+  }, focus ? "TAP FULL LINE TO ZOOM BACK OUT · TAP A NODE FOR DETAILS" : "DRAG TO TRAVEL · TAP A MONTH NAME TO ZOOM IN · TAP A NODE FOR DETAILS"));
+}
+
+/* ══════════ node v2: dates on card, custom color ══════════ */
+function TimelineNode({
+  ev,
+  x,
+  up,
+  now,
+  lineY,
+  arm,
+  card,
+  onOpen
+}) {
+  const T = useT();
+  const [on, setOn] = useState(false);
+  const s = statusOf(ev, now);
+  const pl = ev.where?.channel ? placeOf(ev.where.kind) : null;
+  const PlIcon = pl ? pl.icon : null;
+  const win = (ev.winners || []).find(w => w.name);
+  const files = ev.attachments || [];
+  const hosts = evHosts(ev);
+  const color = s === "live" ? T.live : s === "past" ? T.silver : evBaseColor(ev);
+  const head = s === "live" ? T.live : s === "past" ? T.muted : evBaseColor(ev);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "absolute",
+    style: {
+      left: x,
+      top: lineY,
+      transform: "translateX(-50%)"
+    },
+    onMouseEnter: () => setOn(true),
+    onMouseLeave: () => setOn(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: "50%",
+      top: up ? -arm : 0,
+      width: 1,
+      height: arm,
+      background: up ? `linear-gradient(180deg, transparent, ${color})` : `linear-gradient(180deg, ${color}, transparent)`,
+      opacity: on ? 1 : 0.6
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: onOpen,
+    "aria-label": ev.title,
+    className: s === "live" ? "breathe" : "",
+    style: {
+      position: "absolute",
+      left: "50%",
+      top: -5,
+      width: 10,
+      height: 10,
+      marginLeft: -5,
+      transform: `rotate(45deg) scale(${on ? 1.35 : 1})`,
+      transition: "transform .18s ease",
+      background: s === "past" ? "transparent" : color,
+      border: `1px solid ${color}`,
+      boxShadow: s === "past" ? "none" : `0 0 12px ${color}`,
+      cursor: "pointer",
+      borderRadius: 2
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: onOpen,
+    className: "absolute text-left",
+    style: {
+      left: 12,
+      top: up ? -(arm + card) : arm + 4,
+      width: 150,
+      opacity: on ? 1 : s === "past" ? 0.62 : 0.92,
+      transition: "opacity .2s ease",
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "truncate",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      letterSpacing: "0.12em",
+      color: head
+    }
+  }, evShort(ev), ev.allDay ? " · ALL DAY" : " · " + fmtTime(ev.start)), /*#__PURE__*/React.createElement("div", {
+    className: "mt-1",
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 14,
+      lineHeight: 1.25,
+      color: T.text,
+      display: "-webkit-box",
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: "vertical",
+      overflow: "hidden"
+    }
+  }, ev.title), /*#__PURE__*/React.createElement("div", {
+    className: "mt-0.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      color: T.muted
+    }
+  }, evRange(ev)), pl && /*#__PURE__*/React.createElement("div", {
+    className: "mt-0.5 truncate inline-flex items-center gap-1",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      color: T.muted,
+      maxWidth: 148
+    }
+  }, /*#__PURE__*/React.createElement(PlIcon, {
+    size: 9
+  }), " ", ev.where.channel), win && /*#__PURE__*/React.createElement("div", {
+    className: "mt-0.5 truncate",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      color: T.gold
+    }
+  }, "01 ", win.name), files.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-0.5 inline-flex items-center gap-1",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8,
+      color: T.muted
+    }
+  }, /*#__PURE__*/React.createElement(Paperclip, {
+    size: 8
+  }), " ", files.length), s === "upcoming" && /*#__PURE__*/React.createElement("div", {
+    className: "mt-0.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      color: T.muted
+    }
+  }, countdown(ev.start, now).toUpperCase())));
+}
+
+/* ══════════ ServerTimeline v2: passes serverName, type-aware filter ══════════ */
+function ServerTimeline({
+  server,
+  db,
+  apply,
+  now,
+  auth,
+  me,
+  ping
+}) {
+  const T = useT();
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [zoom, setZoom] = useState(1);
+  const [editing, setEditing] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const events = useMemo(() => Object.values(db.events).filter(e => !e.deleted && e.serverId === server.id), [db, server]);
+  const names = useMemo(() => [db.access.ownerName, ...db.access.members.map(m => m.name)].filter(Boolean), [db]);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return events.filter(e => typeFilter === "all" ? true : resolveType(e).id === typeFilter).filter(e => !q || [e.title, e.label, ...evHosts(e), e.notes, e.where?.channel, ...(e.participants || []), ...(e.winners || []).map(w => w.name)].join(" ").toLowerCase().includes(q)).sort((a, b) => new Date(a.start) - new Date(b.start));
+  }, [events, query, typeFilter]);
+  const saveEvent = ev => {
+    const exists = !!db.events[ev.id];
+    apply(d => {
+      d.events[ev.id] = {
+        ...(d.events[ev.id] || {}),
+        ...ev,
+        serverId: server.id,
+        deleted: false,
+        updatedAt: nowISO(),
+        updatedBy: me.name
+      };
+      return d;
+    }, exists ? "Event updated" : "Event added");
+    setEditing(null);
+  };
+  const deleteEvent = id => {
+    apply(d => {
+      if (d.events[id]) d.events[id] = {
+        ...d.events[id],
+        deleted: true,
+        updatedAt: nowISO(),
+        updatedBy: me.name
+      };
+      return d;
+    }, "Event deleted");
+    setConfirmDel(null);
+    setDetail(null);
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "shrink-0 px-4 sm:px-7 flex gap-2 pt-3 flex-wrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "relative flex-1 min-w-[150px] max-w-xs"
+  }, /*#__PURE__*/React.createElement(Search, {
+    size: 14,
+    className: "absolute left-3 top-1/2 -translate-y-1/2",
+    style: {
+      color: T.muted
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    value: query,
+    onChange: e => setQuery(e.target.value),
+    placeholder: "Search the line",
+    style: {
+      width: "100%",
+      background: T.field,
+      border: `1px solid ${T.hair}`,
+      borderRadius: 10,
+      color: T.text,
+      fontFamily: BODY,
+      fontSize: 14,
+      outline: "none",
+      padding: "8px 12px 8px 34px"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "relative"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: typeFilter,
+    onChange: e => setTypeFilter(e.target.value),
+    style: {
+      background: T.field,
+      border: `1px solid ${T.hair}`,
+      borderRadius: 10,
+      color: T.text,
+      fontFamily: BODY,
+      fontSize: 14,
+      outline: "none",
+      appearance: "none",
+      padding: "8px 30px 8px 12px"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "All types"), TYPES.map(t => /*#__PURE__*/React.createElement("option", {
+    key: t.id,
+    value: t.id
+  }, t.label))), /*#__PURE__*/React.createElement(ChevronDown, {
+    size: 13,
+    className: "absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none",
+    style: {
+      color: T.muted
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "ml-auto flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement(Btn, {
+    size: "sm",
+    onClick: () => setZoom(z => Math.max(0, z - 1)),
+    disabled: zoom === 0
+  }, /*#__PURE__*/React.createElement(ZoomOut, {
+    size: 13
+  })), /*#__PURE__*/React.createElement(Btn, {
+    size: "sm",
+    onClick: () => setZoom(z => Math.min(2, z + 1)),
+    disabled: zoom === 2
+  }, /*#__PURE__*/React.createElement(ZoomIn, {
+    size: 13
+  })), auth.create && /*#__PURE__*/React.createElement(Btn, {
+    tone: "solid",
+    size: "sm",
+    onClick: () => setEditing({
+      ...blank(),
+      type: "vc"
+    })
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "hidden sm:inline"
+  }, "New event")))), /*#__PURE__*/React.createElement(Line, {
+    events: visible,
+    now: now,
+    zoom: ZOOMS[zoom],
+    onOpen: setDetail,
+    empty: events.length === 0,
+    canCreate: auth.create,
+    onAdd: () => setEditing({
+      ...blank(),
+      type: "vc"
+    }),
+    serverName: server.name
+  }), /*#__PURE__*/React.createElement(Detail, {
+    ev: detail,
+    now: now,
+    perms: auth,
+    names: names,
+    onClose: () => setDetail(null),
+    onEdit: e => {
+      setDetail(null);
+      setEditing(e);
+    },
+    onDelete: setConfirmDel,
+    onCopy: t => copy(t, ping)
+  }), /*#__PURE__*/React.createElement(Editor, {
+    ev: editing,
+    onClose: () => setEditing(null),
+    onSave: saveEvent,
+    names: names
+  }), /*#__PURE__*/React.createElement(Modal, {
+    open: !!confirmDel,
+    onClose: () => setConfirmDel(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "p-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 19
+    }
+  }, "Delete this event?"), /*#__PURE__*/React.createElement("p", {
+    className: "mt-2 text-sm",
+    style: {
+      color: T.body
+    }
+  }, "“", confirmDel?.title, "” leaves the line for everyone on the next sync. There's no undo."), /*#__PURE__*/React.createElement("div", {
+    className: "mt-5 flex gap-2"
+  }, /*#__PURE__*/React.createElement(Btn, {
+    tone: "danger",
+    full: true,
+    onClick: () => deleteEvent(confirmDel.id)
+  }, "Delete event"), /*#__PURE__*/React.createElement(Btn, {
+    full: true,
+    onClick: () => setConfirmDel(null)
+  }, "Keep it")))));
+}
+
+/* ══════════ Detail v2: hosts, dates, color, custom label ══════════ */
+function Detail({
+  ev,
+  now,
+  perms,
+  names,
+  onClose,
+  onEdit,
+  onDelete,
+  onCopy
+}) {
+  const T = useT();
+  if (!ev) return null;
+  const t = resolveType(ev);
+  const s = statusOf(ev, now);
+  const pl = ev.where?.channel ? placeOf(ev.where.kind) : null;
+  const PlIcon = pl ? pl.icon : null;
+  const winners = (ev.winners || []).filter(w => w.name);
+  const people = ev.participants || [];
+  const files = (ev.attachments || []).filter(f => f.url);
+  const hosts = evHosts(ev);
+  const end = new Date(ev.start).getTime() + (ev.durationMin || 90) * MIN;
+  const multiday = !sameDay(ev.start, end - MIN);
+  const col = evBaseColor(ev);
+  return /*#__PURE__*/React.createElement(Modal, {
+    open: !!ev,
+    onClose: onClose,
+    wide: true
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "p-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-start justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "inline-flex items-center gap-1.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9.5,
+      letterSpacing: "0.16em",
+      color: s === "live" ? T.live : T.muted
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 8,
+      height: 8,
+      borderRadius: 2,
+      transform: "rotate(45deg)",
+      background: col,
+      display: "inline-block"
+    }
+  }), evShort(ev), ev.label ? " · " + t.short : "", s === "live" ? " · LIVE NOW" : ""), /*#__PURE__*/React.createElement("div", {
+    className: "mt-1.5",
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 24,
+      lineHeight: 1.2
+    }
+  }, ev.title), /*#__PURE__*/React.createElement("div", {
+    className: "mt-1",
+    style: {
+      fontFamily: MONO,
+      fontSize: 10.5,
+      color: T.body
+    }
+  }, ev.allDay ? multiday ? `${fmtFull(ev.start)} → ${fmtFull(end - MIN)} · all-day` : `${fmtFull(ev.start)} · all-day` : `${fmtFull(ev.start)} · ${fmtTime(ev.start)}${multiday ? ` → ${fmtDay(end)} ${fmtTime(end)}` : ""} · ${fmtDur(ev.durationMin)}`, " · ", countdown(ev.start, now)), pl && /*#__PURE__*/React.createElement("div", {
+    className: "mt-1 inline-flex items-center gap-1.5",
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.muted
+    }
+  }, /*#__PURE__*/React.createElement(PlIcon, {
+    size: 11
+  }), " ", pl.label, " · ", ev.where.channel)), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(XIcon, {
+    size: 19
+  }))), hosts.length > 0 && /*#__PURE__*/React.createElement(Block, {
+    label: hosts.length > 1 ? "Hosts" : "Host"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, hosts.map(hst => /*#__PURE__*/React.createElement("span", {
+    key: hst,
+    className: "inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`
+    }
+  }, (names || []).includes(hst.replace(/^@/, "")) && /*#__PURE__*/React.createElement(BadgeCheck, {
+    size: 11,
+    style: {
+      color: T.gold
+    }
+  }), hst)))), winners.length > 0 && /*#__PURE__*/React.createElement(Block, {
+    label: "Results"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5"
+  }, winners.map((w, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "flex items-baseline gap-2.5"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.gold
+    }
+  }, String(w.place || i + 1).padStart(2, "0")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: (w.place || i + 1) === 1 ? 600 : 400
+    }
+  }, w.name), w.score && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.muted
+    }
+  }, w.score), w.prize && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs",
+    style: {
+      color: T.muted
+    }
+  }, w.prize))))), files.length > 0 && /*#__PURE__*/React.createElement(Block, {
+    label: `Attached · ${files.length}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, files.map((f, i) => /*#__PURE__*/React.createElement("a", {
+    key: i,
+    href: f.url,
+    target: "_blank",
+    rel: "noopener noreferrer",
+    className: "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`,
+      color: T.text,
+      textDecoration: "none"
+    }
+  }, /*#__PURE__*/React.createElement(Link2, {
+    size: 11,
+    style: {
+      color: T.gold
+    }
+  }), " ", f.label || "Result link")))), people.length > 0 && /*#__PURE__*/React.createElement(Block, {
+    label: `Participants · ${people.length}`
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: T.body,
+      lineHeight: 1.7
+    }
+  }, people.join(", "))), ev.notes && /*#__PURE__*/React.createElement(Block, {
+    label: "Notes"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: T.body,
+      whiteSpace: "pre-wrap"
+    }
+  }, ev.notes)), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 pt-5 flex-wrap"
+  }, /*#__PURE__*/React.createElement(Btn, {
+    size: "sm",
+    onClick: () => onCopy(announcement(ev))
+  }, /*#__PURE__*/React.createElement(CopyIcon, {
+    size: 12
+  }), " Copy for Discord"), perms.edit && /*#__PURE__*/React.createElement(Btn, {
+    size: "sm",
+    onClick: () => onEdit(ev)
+  }, /*#__PURE__*/React.createElement(Pencil, {
+    size: 12
+  }), " Edit"), perms.delete && /*#__PURE__*/React.createElement(Btn, {
+    size: "sm",
+    tone: "danger",
+    onClick: () => onDelete(ev)
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 12
+  }))), ev.updatedBy && /*#__PURE__*/React.createElement("div", {
+    className: "pt-3",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      color: T.muted
+    }
+  }, "LAST EDIT · ", String(ev.updatedBy).toUpperCase())));
+}
+
+/* ══════════ announcement v2 ══════════ */
+function announcement(ev) {
+  const t = resolveType(ev);
+  const w = (ev.winners || []).filter(x => x.name);
+  const medals = ["🥇", "🥈", "🥉"];
+  const start = Math.floor(new Date(ev.start).getTime() / 1000);
+  const endMs = new Date(ev.start).getTime() + (ev.durationMin || 90) * MIN;
+  const end = Math.floor(endMs / 1000);
+  const multiday = !sameDay(ev.start, endMs - MIN);
+  const pl = ev.where?.channel ? placeOf(ev.where.kind) : null;
+  const hosts = evHosts(ev);
+  return [`**${ev.title}** · ${evLabel(ev)}${ev.label ? ` (${t.label})` : ""}`, ev.allDay ? multiday ? `🗓️ <t:${start}:D> → <t:${end}:D>` : `🗓️ <t:${start}:D> · all day` : multiday ? `🕒 <t:${start}:F> → <t:${end}:F>` : `🕒 <t:${start}:F> · runs ${fmtDur(ev.durationMin)}`, pl ? `${pl.emoji} ${ev.where.channel.startsWith("#") ? ev.where.channel : "#" + ev.where.channel}` : "", hosts.length ? `🎙️ Hosted by ${hosts.join(", ")}` : "", ...w.map((x, i) => `${medals[i] || "🏅"} **${x.name}**${x.score ? ` — ${x.score}` : ""}${x.prize ? ` · ${x.prize}` : ""}`), ...(ev.attachments || []).filter(f => f.url).map(f => `🔗 ${f.label || "Results"}: ${f.url}`), (ev.participants || []).length ? `\n👥 ${ev.participants.length} joined: ${ev.participants.join(", ")}` : "", ev.notes ? `\n📝 ${ev.notes}` : ""].filter(Boolean).join("\n");
+}
+
+/* ══════════ Editor v2: all-day toggle, type+label, color, multi-host ══════════ */
+function Editor({
+  ev,
+  onClose,
+  onSave,
+  names
+}) {
+  const T = useT();
+  const input = useInput();
+  const [d, setD] = useState(null);
+  const [tab, setTab] = useState("when");
+  const [whenTab, setWhenTab] = useState("start");
+  const [peopleText, setPeopleText] = useState("");
+  useEffect(() => {
+    if (ev) {
+      const end = new Date(new Date(ev.start).getTime() + (ev.durationMin || 90) * MIN).toISOString();
+      setD({
+        where: {
+          kind: "voice",
+          channel: ""
+        },
+        ...ev,
+        type: resolveType(ev).id,
+        label: ev.label || "",
+        color: ev.color || null,
+        allDay: !!ev.allDay,
+        hosts: evHosts(ev),
+        end
+      });
+    } else setD(null);
+    setTab("when");
+    setWhenTab("start");
+    setPeopleText((ev?.participants || []).join(", "));
+  }, [ev]);
+  if (!d) return null;
+  const set = (k, v) => setD(x => ({
+    ...x,
+    [k]: v
+  }));
+  const setW = (i, k, v) => setD(x => {
+    const w = [...(x.winners || [])];
+    w[i] = {
+      ...w[i],
+      [k]: v
+    };
+    return {
+      ...x,
+      winners: w
+    };
+  });
+  const setF = (i, k, v) => setD(x => {
+    const a = [...(x.attachments || [])];
+    a[i] = {
+      ...a[i],
+      [k]: v
+    };
+    return {
+      ...x,
+      attachments: a
+    };
+  });
+  const durMin = x => Math.max(5, Math.round((new Date(x.end) - new Date(x.start)) / MIN));
+  const setStart = v => setD(x => {
+    const delta = new Date(v) - new Date(x.start);
+    return {
+      ...x,
+      start: v,
+      end: new Date(new Date(x.end).getTime() + delta).toISOString()
+    };
+  });
+  const setEnd = v => setD(x => ({
+    ...x,
+    end: new Date(v) > new Date(x.start) ? v : new Date(new Date(x.start).getTime() + 60 * MIN).toISOString()
+  }));
+  const setStartDay = (y, mo, dd) => setD(x => {
+    const days = Math.max(0, Math.round((startOfDay(x.end) - startOfDay(x.start)) / DAY));
+    const s = new Date(y, mo, dd, 0, 0, 0, 0);
+    const e = new Date(y, mo, dd + days, 23, 59, 0, 0);
+    return {
+      ...x,
+      start: s.toISOString(),
+      end: e.toISOString()
+    };
+  });
+  const setEndDay = (y, mo, dd) => setD(x => {
+    let e = new Date(y, mo, dd, 23, 59, 0, 0);
+    if (e < new Date(x.start)) e = new Date(new Date(x.start).getFullYear(), new Date(x.start).getMonth(), new Date(x.start).getDate(), 23, 59, 0, 0);
+    return {
+      ...x,
+      end: e.toISOString()
+    };
+  });
+  const toggleAllDay = on => setD(x => {
+    if (on) {
+      const s = new Date(x.start);
+      s.setHours(0, 0, 0, 0);
+      const e = new Date(x.end);
+      e.setHours(23, 59, 0, 0);
+      return {
+        ...x,
+        allDay: true,
+        start: s.toISOString(),
+        end: e < s ? new Date(s.getFullYear(), s.getMonth(), s.getDate(), 23, 59).toISOString() : e.toISOString()
+      };
+    }
+    const s = new Date(x.start);
+    s.setHours(20, 0, 0, 0);
+    return {
+      ...x,
+      allDay: false,
+      start: s.toISOString(),
+      end: new Date(s.getTime() + 90 * MIN).toISOString()
+    };
+  });
+  const dateSummary = d.allDay ? sameDay(d.start, new Date(d.end).getTime() - MIN) ? fmtDay(d.start) + " · all day" : `${fmtDay(d.start)} → ${fmtDay(d.end)}` : `${fmtDay(d.start)} ${fmtTime(d.start)} → ${fmtDay(d.end)} ${fmtTime(d.end)} · ${fmtDur(durMin(d))}`;
+  return /*#__PURE__*/React.createElement(Modal, {
+    open: !!d,
+    onClose: onClose,
+    wide: true
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "p-5 sm:p-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-1"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 21
+    }
+  }, ev?.title ? "Edit event" : "New event"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(XIcon, {
+    size: 19
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "mb-4",
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.muted
+    }
+  }, d.title || "Untitled", " · ", dateSummary), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1 mb-5 p-1 rounded-xl",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`
+    }
+  }, TABS.map(t => {
+    const Icon = t.icon,
+      on = tab === t.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => setTab(t.id),
+      className: "flex-1 py-2 rounded-lg inline-flex items-center justify-center gap-1.5",
+      style: {
+        background: on ? T.solidBtn : "transparent",
+        color: on ? T.solidInk : T.muted,
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: "0.1em",
+        border: "none",
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 12
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "hidden sm:inline"
+    }, String(t.label).toUpperCase()));
+  })), tab === "when" && /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "rounded-xl px-3 py-2.5 flex items-center justify-between flex-wrap gap-2",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: DISPLAY,
+      fontSize: 15
+    }
+  }, dateSummary)), /*#__PURE__*/React.createElement(Toggle, {
+    on: !d.allDay,
+    onChange: on => toggleAllDay(!on),
+    label: d.allDay ? "All-day — no set times" : "Exact start & end times"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1 p-1 rounded-xl",
+    style: {
+      background: T.panel,
+      border: `1px solid ${T.hair}`
+    }
+  }, [["start", d.allDay ? "First day" : "Starts"], ["end", d.allDay ? "Last day" : "Ends"]].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => setWhenTab(id),
+    className: "flex-1 py-2 rounded-lg",
+    style: {
+      background: whenTab === id ? T.solidBtn : "transparent",
+      color: whenTab === id ? T.solidInk : T.muted,
+      fontFamily: MONO,
+      fontSize: 9.5,
+      letterSpacing: "0.1em",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, String(label).toUpperCase()))), d.allDay ? whenTab === "start" ? /*#__PURE__*/React.createElement(DayPick, {
+    value: d.start,
+    onPick: setStartDay
+  }) : /*#__PURE__*/React.createElement(DayPick, {
+    value: d.end,
+    onPick: setEndDay
+  }) : whenTab === "start" ? /*#__PURE__*/React.createElement(DateTime, {
+    value: d.start,
+    onChange: setStart
+  }) : /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, /*#__PURE__*/React.createElement(DateTime, {
+    value: d.end,
+    onChange: setEnd
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Quick length from start"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap"
+  }, [["1H", 60], ["3H", 180], ["1 DAY", 1440], ["3 DAYS", 4320], ["1 WEEK", 10080]].map(([l, mns]) => /*#__PURE__*/React.createElement("button", {
+    key: l,
+    onClick: () => setD(x => ({
+      ...x,
+      end: new Date(new Date(x.start).getTime() + mns * MIN).toISOString()
+    })),
+    className: "px-2 py-1 rounded-md",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      letterSpacing: "0.06em",
+      border: `1px solid ${durMin(d) === mns ? T.gold + "66" : T.hair}`,
+      cursor: "pointer",
+      background: durMin(d) === mns ? "rgba(180,140,40,.1)" : "transparent",
+      color: durMin(d) === mns ? T.gold : T.muted
+    }
+  }, l))))), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs",
+    style: {
+      color: T.muted
+    }
+  }, d.allDay ? "All-day events run midnight to 11:59 PM and show without clock times on the line." : "Everyone sees times in their own time zone.")), tab === "what" && /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Event name"
+  }, /*#__PURE__*/React.createElement("input", {
+    style: input,
+    value: d.title,
+    onChange: e => set("title", e.target.value),
+    placeholder: "Event title"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Type"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap mb-2"
+  }, TYPES.map(t => {
+    const on = d.type === t.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => set("type", t.id),
+      className: "px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5",
+      style: {
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: "0.08em",
+        border: `1px solid ${on ? t.color + "88" : T.hair}`,
+        cursor: "pointer",
+        background: on ? t.color + "1a" : "transparent",
+        color: on ? t.color : T.muted
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 7,
+        height: 7,
+        borderRadius: 2,
+        transform: "rotate(45deg)",
+        background: t.color,
+        display: "inline-block"
+      }
+    }), t.label.toUpperCase());
+  })), /*#__PURE__*/React.createElement("input", {
+    style: input,
+    value: d.label,
+    onChange: e => set("label", e.target.value.slice(0, 28)),
+    placeholder: "Custom label — e.g. Last to Leave VC (optional, shows on the line)"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Line colour"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap items-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => set("color", null),
+    className: "px-2 py-1 rounded-md",
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      letterSpacing: "0.08em",
+      cursor: "pointer",
+      border: `1px solid ${!d.color ? T.gold + "66" : T.hair}`,
+      background: !d.color ? "rgba(180,140,40,.1)" : "transparent",
+      color: !d.color ? T.gold : T.muted
+    }
+  }, "AUTO"), PALETTE.map(c => /*#__PURE__*/React.createElement("button", {
+    key: c,
+    onClick: () => set("color", c),
+    style: {
+      width: 24,
+      height: 24,
+      borderRadius: "50%",
+      background: c,
+      cursor: "pointer",
+      border: d.color === c ? `2px solid ${T.text}` : "2px solid transparent"
+    }
+  })))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Hosts"), /*#__PURE__*/React.createElement(HostsInput, {
+    value: d.hosts,
+    onChange: v => set("hosts", v),
+    names: names
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Where it happens"), /*#__PURE__*/React.createElement("input", {
+    style: input,
+    value: d.where?.channel || "",
+    onChange: e => set("where", {
+      kind: kindFromType[d.type] || "other",
+      channel: e.target.value
+    }),
+    placeholder: d.type === "vc" ? "Voice channel, e.g. events-vc" : d.type === "channel" ? "Text channel, e.g. #event-chat" : "Where, e.g. whole server / stage"
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Notes"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    rows: 3,
+    style: {
+      ...input,
+      resize: "vertical"
+    },
+    value: d.notes,
+    onChange: e => set("notes", e.target.value),
+    placeholder: "Format, rules, anything the team should know"
+  }))), tab === "results" && /*#__PURE__*/React.createElement("div", {
+    className: "space-y-5"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Placements"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
+  }, (d.winners || []).map((w, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "flex gap-2 items-center"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "w-8 shrink-0 text-center py-2 rounded-lg",
+    style: {
+      background: "rgba(180,140,40,.1)",
+      border: "1px solid rgba(180,140,40,.3)",
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.gold
+    }
+  }, String(w.place || i + 1).padStart(2, "0")), /*#__PURE__*/React.createElement("input", {
+    style: input,
+    value: w.name || "",
+    onChange: e => setW(i, "name", e.target.value),
+    placeholder: "Placement holder"
+  }), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...input,
+      maxWidth: 92
+    },
+    value: w.score || "",
+    onChange: e => setW(i, "score", e.target.value),
+    placeholder: "Score"
+  }), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...input,
+      maxWidth: 100
+    },
+    value: w.prize || "",
+    onChange: e => setW(i, "prize", e.target.value),
+    placeholder: "Prize"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setD(x => ({
+      ...x,
+      winners: x.winners.filter((_, y) => y !== i)
+    })),
+    style: {
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(XIcon, {
+    size: 15
+  }))))), /*#__PURE__*/React.createElement("button", {
+    className: "mt-2 inline-flex items-center gap-1.5 text-xs",
+    style: {
+      color: T.gold,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    },
+    onClick: () => setD(x => ({
+      ...x,
+      winners: [...(x.winners || []), {
+        place: (x.winners?.length || 0) + 1,
+        name: "",
+        prize: "",
+        score: ""
+      }]
+    }))
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 12
+  }), " Add a place")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Attached results"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mb-2",
+    style: {
+      color: T.muted
+    }
+  }, "Link a results graphic, a message, or a full scoreboard."), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
+  }, (d.attachments || []).map((f, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "flex gap-2 items-center"
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...input,
+      maxWidth: 130
+    },
+    value: f.label || "",
+    onChange: e => setF(i, "label", e.target.value),
+    placeholder: "Label"
+  }), /*#__PURE__*/React.createElement("input", {
+    style: input,
+    value: f.url || "",
+    onChange: e => setF(i, "url", e.target.value),
+    placeholder: "https://"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setD(x => ({
+      ...x,
+      attachments: x.attachments.filter((_, y) => y !== i)
+    })),
+    style: {
+      color: T.muted,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(XIcon, {
+    size: 15
+  }))))), /*#__PURE__*/React.createElement("button", {
+    className: "mt-2 inline-flex items-center gap-1.5 text-xs",
+    style: {
+      color: T.gold,
+      background: "none",
+      border: "none",
+      cursor: "pointer"
+    },
+    onClick: () => setD(x => ({
+      ...x,
+      attachments: [...(x.attachments || []), {
+        label: "",
+        url: ""
+      }]
+    }))
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 12
+  }), " Attach a link"))), tab === "people" && /*#__PURE__*/React.createElement(Field, {
+    label: "Participants",
+    hint: "Separate with commas or new lines"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    rows: 6,
+    style: {
+      ...input,
+      resize: "vertical"
+    },
+    value: peopleText,
+    onChange: e => setPeopleText(e.target.value),
+    placeholder: "Add participants"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "mt-6 flex gap-2"
+  }, /*#__PURE__*/React.createElement(Btn, {
+    tone: "solid",
+    full: true,
+    onClick: () => {
+      const {
+        end,
+        ...rest
+      } = d;
+      const hosts = (d.hosts || []).filter(Boolean);
+      onSave({
+        ...rest,
+        durationMin: durMin(d),
+        title: d.title.trim() || "Untitled event",
+        label: (d.label || "").trim(),
+        color: d.color || null,
+        allDay: !!d.allDay,
+        hosts,
+        host: hosts.join(", "),
+        where: d.where?.channel?.trim() ? {
+          kind: kindFromType[d.type] || "other",
+          channel: d.where.channel.trim()
+        } : null,
+        participants: peopleText.split(/[,\n]/).map(s => s.trim()).filter(Boolean),
+        winners: (d.winners || []).filter(w => (w.name || "").trim()),
+        attachments: (d.attachments || []).filter(f => (f.url || "").trim())
+      });
+    }
+  }, "Save event"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: onClose
+  }, "Cancel"))));
+}
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(configured ? /*#__PURE__*/React.createElement(App, null) : /*#__PURE__*/React.createElement(Setup, {
   T: THEME.dark
