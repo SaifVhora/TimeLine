@@ -1,7 +1,7 @@
 /* Events Timeline — offline cache.
    Caches the app shell and CDN scripts so the page opens with no internet.
    Live data still comes from Firebase and syncs when the connection returns. */
-const CACHE = "events-timeline-v1";
+const CACHE = "events-timeline-v2";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["./", "./index.html"])).catch(() => {}));
