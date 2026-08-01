@@ -4,7 +4,7 @@
    so the app still opens with no connection.
    CDN files (fonts, React, Tailwind) stay cache-first because they never change. */
 const CACHE = "events-timeline-v7";
-const SHELL = ["./", "./index.html", "./src/app.js"];
+const SHELL = ["./", "./index.html"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
