@@ -8,15 +8,14 @@ export const DB_PATH = "events_timeline_v1";
 /* event types — add one here and it appears everywhere */
 export const TYPES = [
   { id: "vc",      label: "VC event",      short: "VC",      color: "#8B7BFF" },
-  { id: "channel", label: "Channel event", short: "CHANNEL", color: "#38BDF8" },
+  { id: "channel", label: "Channel event", short: "CHANNEL", color: "#35D6C0" },
   { id: "server",  label: "Server event",  short: "SERVER",  color: "#E8C87A" },
   { id: "other",   label: "Other",         short: "EVENT",   color: "#8B93AD" },
 ];
 /* events made before the type rename map onto the new ones */
 export const LEGACY_TYPE = { lltvc: "vc", karaoke: "vc", gtac: "channel", chart: "channel", auction: "server" };
 
-/* deliberately no greens — green is reserved for "happening right now" */
-export const PALETTE = ["#8B7BFF", "#38BDF8", "#E8C87A", "#FF9F6B", "#FF7BD5", "#C08BFF", "#7BC5FF", "#FF7285"];
+export const PALETTE = ["#8B7BFF", "#35D6C0", "#E8C87A", "#FF9F6B", "#FF7BD5", "#6BE3B8", "#7BC5FF", "#FF7285"];
 
 export const ROLE_PRESET = {
   admin:  { create: true,  edit: true,  delete: true,  manage: true  },

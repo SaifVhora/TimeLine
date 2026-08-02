@@ -7,6 +7,8 @@ import { ROLE_PRESET, PERMS } from "../config.js";
 import { fingerprint, copy, appLink } from "../lib/util.js";
 import { nowISO, ago } from "../lib/time.js";
 import { Avatar } from "./avatar.js";
+import { DataTab } from "./data-tab.js";
+import { Database } from "../icons.js";
 
 export function Admin(p) {
   const T = useT();
@@ -78,7 +80,8 @@ export function Admin(p) {
       h("div", { className: "flex gap-1 mb-5 p-1 rounded-xl", style: { background: T.panel, border: "1px solid " + T.hair } },
         tabBtn("requests", "Requests \u00B7 " + pending.length),
         tabBtn("staff", "Staff \u00B7 " + members.length),
-        tabBtn("invite", "Invite")),
+        tabBtn("invite", "Invite"),
+        tabBtn("data", "Data")),
 
       tab === "requests" ? h("div", null,
         pending.length === 0 ? h("div", { className: "py-8 text-sm text-center", style: { color: T.muted } }, "Nobody's knocking right now.") : null,
@@ -143,5 +146,7 @@ export function Admin(p) {
             h(Btn, { full: true, onClick: () => copy(savedLink, p.ping) }, h(Link2, { size: 13 }), " Copy just the link"))),
         h("div", { className: "flex gap-2 text-xs", style: { color: T.muted } },
           h(AlertCircle, { size: 13, className: "shrink-0 mt-0.5" }),
-          h("span", null, "Anyone with the link can ask; nobody gets in without your tap. Names are self-declared \u2014 match the device tag against who actually messaged you."))) : null));
+          h("span", null, "Anyone with the link can ask; nobody gets in without your tap. Names are self-declared \u2014 match the device tag against who actually messaged you."))) : null,
+
+      tab === "data" ? h(DataTab, { db: p.db, apply: p.apply, ping: p.ping }) : null));
 }

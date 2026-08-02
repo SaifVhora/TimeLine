@@ -5,12 +5,13 @@ import { installGestures, BackStack } from "./ui/gestures.js";
 import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, Lock } from "./icons.js";
 import { PASS_SALT } from "./config.js";
 import { EMPTY, configured, normalize, mergeDB, readRemote, writeRemote, cache } from "./store/db.js";
+import { maybeSnapshot } from "./store/backup.js";
 import { computeAuth } from "./auth/roles.js";
 import { Gate, NameForm, JoinModal, SigninModal, ProfileModal } from "./auth/people.js";
 import { Admin } from "./auth/admin.js";
 import { Home } from "./views/home.js";
 import { Hub } from "./views/hub.js";
-import { ServerTimeline } from "./views/timeline.js";
+import { ServerView } from "./views/server.js";
 import { hashPass, newKey, uid, fingerprint, appLink } from "./lib/util.js";
 import { nowISO, ago } from "./lib/time.js";
 import { Setup } from "./views/setup.js";
@@ -65,6 +66,7 @@ function App() {
       local.current = merged; setDb(merged); cache.saveDb(merged);
       if (dirty.current || JSON.stringify(remote) !== JSON.stringify(merged)) await writeRemote(merged);
       dirty.current = false; setConn("synced"); setLastSync(Date.now());
+      try { maybeSnapshot(merged); } catch (e) {}
       if (announce) ping("Everything is up to date");
       return true;
     } catch (e) {
@@ -238,7 +240,7 @@ function App() {
         (view === "timeline" || view === "leaving") && server
           ? h("div", { className: "absolute inset-0 flex flex-col " + (view === "leaving" ? "" : "fadein"),
               style: { opacity: view === "leaving" ? 0 : 1, transition: "opacity .35s ease" } },
-              h(ServerTimeline, { server, db, apply, now, auth, me, ping }))
+              h(ServerView, { server, db, apply, now, auth, me, ping }))
           : null),
 
       h("footer", { className: "shrink-0 px-4 sm:px-7 py-2 flex items-center gap-2 text-xs flex-wrap",
@@ -259,7 +261,7 @@ function App() {
         style: { background: T.solidBtn, color: T.solidInk, borderRadius: 10, maxWidth: "90vw", boxShadow: "0 10px 40px rgba(0,0,0,.4)" } },
         toast.msg) : null,
 
-      h(Admin, { open: showAdmin, onClose: () => setShowAdmin(false), access: db.access, apply, ping }),
+      h(Admin, { open: showAdmin, onClose: () => setShowAdmin(false), access: db.access, db, apply, ping }),
 
       h(JoinModal, { open: showJoin, onClose: () => setShowJoin(false), denied: auth.state === "denied",
         onDone: async (name, pass) => {
