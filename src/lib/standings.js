@@ -47,17 +47,13 @@ export function buildStandings(events, opts) {
   });
 
   const all = Object.values(people);
-  const rank = (arr) => arr.sort((a, b) =>
-    b.points - a.points || b.wins - a.wins || b.podium - a.podium || b.last - a.last || a.name.localeCompare(b.name));
 
   return {
     counted,
-    champions: rank(all.filter((p) => p.places > 0)).slice(0, 50),
     hosts: all.filter((p) => p.hosted > 0).sort((a, b) => b.hosted - a.hosted || a.name.localeCompare(b.name)).slice(0, 20),
     regulars: all.filter((p) => p.joined > 0).sort((a, b) => b.joined - a.joined || a.name.localeCompare(b.name)).slice(0, 20),
     totals: {
       people: all.length,
-      wins: all.reduce((n, p) => n + p.wins, 0),
       hosted: all.reduce((n, p) => n + p.hosted, 0),
     },
   };

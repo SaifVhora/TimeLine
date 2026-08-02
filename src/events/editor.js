@@ -10,7 +10,7 @@ import { resolveType, evHosts, kindFromType } from "../lib/events.js";
 import { DayPick, TimeField, HostsInput } from "./pickers.js";
 
 export const blankEvent = () => ({
-  id: uid(), title: "", type: "vc", label: "", color: null, allDay: false,
+  id: uid(), title: "", type: "vc", label: "", color: null, allDay: false, side: "auto",
   start: new Date(Date.now() + HOUR).toISOString(), durationMin: 90,
   hosts: [], where: { kind: "voice", channel: "" },
   winners: [{ place: 1, name: "", prize: "", score: "" }], attachments: [], participants: [], notes: "",
@@ -34,7 +34,8 @@ export function Editor(p) {
     if (p.ev) {
       const end = new Date(new Date(p.ev.start).getTime() + (p.ev.durationMin || 90) * MIN).toISOString();
       setD({ where: { kind: "voice", channel: "" }, ...p.ev, type: resolveType(p.ev).id,
-        label: p.ev.label || "", color: p.ev.color || null, allDay: !!p.ev.allDay, hosts: evHosts(p.ev), end });
+        label: p.ev.label || "", color: p.ev.color || null, allDay: !!p.ev.allDay,
+        side: p.ev.side || "auto", hosts: evHosts(p.ev), end });
     } else setD(null);
     setTab("when");
     setPeopleText(((p.ev && p.ev.participants) || []).join(", "));
@@ -93,6 +94,7 @@ export function Editor(p) {
       label: (d.label || "").trim(),
       color: d.color || null,
       allDay: !!d.allDay,
+      side: d.side || "auto",
       hosts, host: hosts.join(", "),
       where: d.where && d.where.channel && d.where.channel.trim()
         ? { kind: kindFromType[d.type] || "other", channel: d.where.channel.trim() } : null,
@@ -165,6 +167,15 @@ export function Editor(p) {
             PALETTE.map((c) => h("button", { key: c, onClick: () => set("color", c),
               style: { width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
                 border: d.color === c ? "2px solid " + T.text : "2px solid transparent" } })))),
+
+        h("div", null, h(Label, null, "Where it sits on the line"),
+          h("div", { className: "flex gap-1.5 flex-wrap" },
+            [["auto", "AUTO"], ["top", "ABOVE"], ["bot", "BELOW"]].map((opt) =>
+              h(Chip, { key: opt[0], on: (d.side || "auto") === opt[0], onClick: () => set("side", opt[0]) }, opt[1]))),
+          h("div", { className: "mt-1.5 text-xs", style: { color: T.muted } },
+            (d.side || "auto") === "auto"
+              ? "Placed automatically so nothing overlaps."
+              : "Pinned " + (d.side === "top" ? "above" : "below") + " the line. Pinned events that clash stack outward on that side.")),
 
         h("div", null, h(Label, null, "Hosts"),
           h(HostsInput, { value: d.hosts, onChange: (v) => set("hosts", v), names: p.names })),

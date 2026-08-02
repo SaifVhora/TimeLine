@@ -58,15 +58,26 @@ export async function exportMonthPNG(opts) {
   /* lay cards out first so we know how tall the image must be */
   const sides = { top: [], bot: [] };
   const order = [["top", 0], ["bot", 0], ["top", 1], ["bot", 1], ["top", 2], ["bot", 2], ["top", 3], ["bot", 3]];
-  const placed = items.map((ev) => {
-    const x = xOf(evStart(ev));
-    let side = "top", lane = 0, ok = false;
-    for (const [sd, ln] of order) {
-      if ((sides[sd][ln] === undefined ? -1e9 : sides[sd][ln]) <= x - (CARDW + 10)) { side = sd; lane = ln; ok = true; break; }
+  const free = (sd, ln, x) => (sides[sd][ln] === undefined ? -1e9 : sides[sd][ln]) <= x - (CARDW + 10);
+  const seq = items.map((ev, i) => ({ ev, i })).sort((a, b) => {
+    const pa = a.ev.side === "top" || a.ev.side === "bot" ? 0 : 1;
+    const pb = b.ev.side === "top" || b.ev.side === "bot" ? 0 : 1;
+    return pa - pb || a.i - b.i;
+  });
+  const placed = new Array(items.length);
+  seq.forEach((entry) => {
+    const ev = entry.ev, x = xOf(evStart(ev));
+    const pin = ev.side === "top" || ev.side === "bot" ? ev.side : null;
+    let side, lane, ok = false;
+    if (pin) {
+      for (let ln = 0; ln < 8; ln++) if (free(pin, ln, x)) { side = pin; lane = ln; ok = true; break; }
+      if (!ok) { side = pin; lane = sides[pin].length; }
+    } else {
+      for (const pair of order) if (free(pair[0], pair[1], x)) { side = pair[0]; lane = pair[1]; ok = true; break; }
+      if (!ok) { side = sides.top.length <= sides.bot.length ? "top" : "bot"; lane = sides[side].length; }
     }
-    if (!ok) { side = sides.top.length <= sides.bot.length ? "top" : "bot"; lane = sides[side].length; }
     sides[side][lane] = x + CARDW + 10;
-    return { ev, x, side, lane };
+    placed[entry.i] = { ev, x, side, lane };
   });
   const topLanes = Math.max(1, sides.top.length), botLanes = Math.max(1, sides.bot.length);
   const ARM0 = 74;

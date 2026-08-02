@@ -1,5 +1,5 @@
 /* Offline cache. Bump CACHE whenever files change so browsers pick up the new copy. */
-const CACHE = "events-timeline-v8";
+const CACHE = "events-timeline-v10";
 const SHELL = ["./", "./index.html", "./src/app.js"];
 
 self.addEventListener("install", (e) => {

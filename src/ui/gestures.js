@@ -6,6 +6,22 @@ export const BackStack = {
 };
 export function goBack() { if (!BackStack.pop()) window.dispatchEvent(new Event("et-back")); }
 
+/* The phone's own edge-swipe fires the browser's back navigation, which used to
+   unload the page — and a reload always lands on the home screen. So we keep a
+   spare history entry: the browser's back pops it, we handle it ourselves, and
+   push it straight back. Only when there's nothing left to go back to do we let
+   the browser actually leave. */
+export function installHistoryTrap(isAtRoot) {
+  if (window.__etHistory) return;
+  window.__etHistory = true;
+  try { history.replaceState({ et: "root" }, ""); history.pushState({ et: "trap" }, ""); } catch (e) { return; }
+  window.addEventListener("popstate", () => {
+    if (isAtRoot && isAtRoot()) return;              /* home screen — let them leave */
+    try { history.pushState({ et: "trap" }, ""); } catch (e) {}
+    goBack();
+  });
+}
+
 export function installGestures() {
   if (window.__etGestures) return;
   window.__etGestures = true;
@@ -51,7 +67,7 @@ export function installGestures() {
     const dx = t.clientX - sw.x, dy = Math.abs(t.clientY - sw.y);
     const fire = dx > 70 && dy < 70 && Date.now() - sw.t < 700;
     clearHint(fire);
-    if (fire) goBack();
+    if (fire && !window.__etHistory) goBack();
     sw = null;
   }, { passive: true });
   window.addEventListener("touchcancel", () => { sw = null; clearHint(false); }, { passive: true });

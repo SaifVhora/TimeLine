@@ -36,6 +36,8 @@ When you change **any** file, bump the version number at the top of `sw.js`
 | Snapshot + backup file logic | `src/store/backup.js` |
 | Join / sign in / profile | `src/auth/people.js` |
 | Who can do what | `src/auth/roles.js` |
+| Create/edit roles | `src/auth/roles-tab.js` |
+| The list of powers | `src/config.js` (PERMS) |
 | Avatars | `src/auth/avatar.js` |
 | Saving + syncing | `src/store/db.js` |
 | Buttons, fields, toggles | `src/ui/atoms.js` |
@@ -91,3 +93,40 @@ Inside a server, a thin nav row switches between five views of the same data:
 
 The editor and detail popups live in `src/views/server.js`, so every page can
 open and edit events.
+
+
+## Roles and powers (round 3)
+
+Eight powers, defined in `PERMS` in `src/config.js`: add events, edit any event,
+edit own events, delete events, manage servers, approve people, manage roles,
+backups & restore.
+
+Three built-in roles (Admin / Editor / Viewer) can't be edited or deleted.
+Admin panel → **Roles** creates your own: name, colour, and any mix of powers.
+Deleting a custom role drops its holders to Viewer — nobody ever loses access.
+
+Per-person overrides still work and now sit *on top of* the role, storing only
+the differences. Change someone's role and their overrides reset.
+
+`canEditEvent(auth, ev, me)` handles "edit own events" — events record
+`createdBy` (device key) when first saved.
+
+## The back-gesture fix
+
+A phone's edge-swipe triggers the browser's own back navigation, which unloaded
+the page — and a reload always lands on the home screen. `installHistoryTrap`
+in `src/ui/gestures.js` keeps a spare history entry so the browser's back is
+caught, handled by the app's own back chain, and the entry pushed straight back.
+Only on the home screen is the browser allowed to actually leave.
+
+
+## Pinning an event above or below the line
+
+Editor → What → **Where it sits on the line**: Auto / Above / Below.
+
+Auto is the default and does what it always did — alternates sides so nothing
+overlaps. Pin an event and it always renders on that side; `layoutCards` in
+`src/timeline/lanes.js` places pinned events first so they claim the lane
+nearest the line, and auto events fill in around them. Pinned events that clash
+stack outward on their own side rather than jumping across. The PNG export uses
+the same rule, so an exported month matches what you see.

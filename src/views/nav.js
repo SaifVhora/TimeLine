@@ -7,7 +7,7 @@ export const PAGES = [
   { id: "timeline", label: "timeline" },
   { id: "calendar", label: "calendar" },
   { id: "archive", label: "archive" },
-  { id: "standings", label: "standings" },
+  { id: "standings", label: "people" },
 ];
 
 export function Nav(p) {

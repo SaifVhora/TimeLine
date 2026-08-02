@@ -1,12 +1,12 @@
 import React, { h, useState, useEffect, useMemo, useCallback, useRef } from "./react.js";
 import { THEME, BODY, DISPLAY, MONO, globalCSS } from "./theme.js";
 import { ThemeCtx, useT, Btn } from "./ui/atoms.js";
-import { installGestures, BackStack } from "./ui/gestures.js";
+import { installGestures, installHistoryTrap, BackStack } from "./ui/gestures.js";
 import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, Lock } from "./icons.js";
 import { PASS_SALT } from "./config.js";
 import { EMPTY, configured, normalize, mergeDB, readRemote, writeRemote, cache } from "./store/db.js";
 import { maybeSnapshot } from "./store/backup.js";
-import { computeAuth } from "./auth/roles.js";
+import { computeAuth, canOpenAdmin } from "./auth/roles.js";
 import { Gate, NameForm, JoinModal, SigninModal, ProfileModal } from "./auth/people.js";
 import { Admin } from "./auth/admin.js";
 import { Home } from "./views/home.js";
@@ -118,14 +118,17 @@ function App() {
   const backToHome = () => setView("home");
 
   /* back chain: timeline → hub → home */
+  const viewRef = useRef(view);
+  viewRef.current = view;
   useEffect(() => {
     const onBack = () => {
-      if (view === "timeline") backToHub();
-      else if (view === "hub") backToHome();
+      if (viewRef.current === "timeline") backToHub();
+      else if (viewRef.current === "hub") backToHome();
     };
     window.addEventListener("et-back", onBack);
+    installHistoryTrap(() => viewRef.current === "home");
     return () => window.removeEventListener("et-back", onBack);
-  }, [view]);
+  }, []);
 
   const signInWithPass = async (name, pass) => {
     await sync(false);
@@ -192,7 +195,7 @@ function App() {
 
   const footerLeft = auth.registered
     ? h("span", { style: { fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em" } },
-        String(me.name || "").toUpperCase() + " \u00B7 " + auth.role.toUpperCase())
+        String(me.name || "").toUpperCase() + " \u00B7 " + String(auth.roleName || auth.role).toUpperCase())
     : auth.state === "waiting"
       ? h("span", { className: "inline-flex items-center gap-1.5 breathe",
           style: { fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: T.gold } },
@@ -217,9 +220,9 @@ function App() {
             unit: view === "timeline" ? "EVENTS" : "SERVERS" })),
         h(Btn, { size: "sm", onClick: flip, title: "Switch theme" }, mode === "dark" ? h(Sun, { size: 13 }) : h(Moon, { size: 13 })),
         h(Btn, { size: "sm", onClick: () => sync(true), title: "Sync" }, h(RotateCw, { size: 13, className: conn === "syncing" ? "spin" : "" })),
-        auth.manage ? h("div", { className: "relative" },
+        canOpenAdmin(auth) ? h("div", { className: "relative" },
           h(Btn, { size: "sm", onClick: () => setShowAdmin(true), title: "Admin" }, h(Shield, { size: 13 })),
-          pendingCount > 0 ? h("span", { className: "absolute -top-1 -right-1 flex items-center justify-center breathe",
+          pendingCount > 0 && auth.members ? h("span", { className: "absolute -top-1 -right-1 flex items-center justify-center breathe",
             style: { background: T.gold, color: "#04060D", borderRadius: 9, minWidth: 15, height: 15, fontSize: 9, fontFamily: MONO } },
             pendingCount) : null) : null),
 
@@ -231,7 +234,7 @@ function App() {
         view === "hub" || view === "zooming" ? h("div", { className: "absolute inset-0",
           style: { transform: view === "zooming" ? "scale(7)" : "scale(1)", opacity: view === "zooming" ? 0 : 1,
             transformOrigin: origin, transition: "transform .62s cubic-bezier(.55,0,.35,1), opacity .62s ease" } },
-          h(Hub, { servers, events: allEvents, onEnter: enterServer, canManage: auth.manage,
+          h(Hub, { servers, events: allEvents, onEnter: enterServer, canManage: auth.servers,
             onCreate: (name) => apply((d) => { const id = uid();
               d.servers[id] = { id, name, createdAt: nowISO(), updatedAt: nowISO() }; return d; }, "Server added to the constellation"),
             onRemove: (id) => apply((d) => {
@@ -261,7 +264,7 @@ function App() {
         style: { background: T.solidBtn, color: T.solidInk, borderRadius: 10, maxWidth: "90vw", boxShadow: "0 10px 40px rgba(0,0,0,.4)" } },
         toast.msg) : null,
 
-      h(Admin, { open: showAdmin, onClose: () => setShowAdmin(false), access: db.access, db, apply, ping }),
+      h(Admin, { open: showAdmin, onClose: () => setShowAdmin(false), access: db.access, db, apply, ping, auth }),
 
       h(JoinModal, { open: showJoin, onClose: () => setShowJoin(false), denied: auth.state === "denied",
         onDone: async (name, pass) => {

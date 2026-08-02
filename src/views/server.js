@@ -6,6 +6,7 @@ import { BackStack } from "../ui/gestures.js";
 import { nowISO, MIN, HOUR } from "../lib/time.js";
 import { copy } from "../lib/util.js";
 import { evHosts, evStart } from "../lib/events.js";
+import { canEditEvent } from "../auth/roles.js";
 import { buildTodo } from "../lib/todo.js";
 import { Nav } from "./nav.js";
 import { TimelinePage } from "./timeline.js";
@@ -42,7 +43,10 @@ export function ServerView(p) {
   const saveEvent = (ev) => {
     const exists = !!p.db.events[ev.id];
     p.apply((d) => {
-      d.events[ev.id] = { ...(d.events[ev.id] || {}), ...ev, serverId: p.server.id, deleted: false,
+      const existing = d.events[ev.id];
+      d.events[ev.id] = { ...(existing || {}), ...ev, serverId: p.server.id, deleted: false,
+        createdBy: (existing && existing.createdBy) || p.me.key,
+        createdByName: (existing && existing.createdByName) || p.me.name,
         updatedAt: nowISO(), updatedBy: p.me.name };
       return d;
     }, exists ? "Event updated" : "Event added");
@@ -77,7 +81,8 @@ export function ServerView(p) {
       page === "archive" ? h(ArchivePage, shared) : null,
       page === "standings" ? h(StandingsPage, shared) : null),
 
-    h(Detail, { ev: detail, now: p.now, perms: p.auth, names, onClose: () => setDetail(null),
+    h(Detail, { ev: detail, now: p.now, names, onClose: () => setDetail(null),
+      perms: { edit: canEditEvent(p.auth, detail, p.me), delete: p.auth.delete },
       onEdit: (e) => { setDetail(null); setEditing(e); }, onDelete: setConfirmDel, onCopy: (t) => copy(t, p.ping) }),
 
     h(Editor, { ev: editing, onClose: () => setEditing(null), onSave: saveEvent, names }),

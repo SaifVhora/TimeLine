@@ -6,12 +6,11 @@ import { DAY } from "../lib/time.js";
 import { Avatar } from "../auth/avatar.js";
 import { buildStandings } from "../lib/standings.js";
 
-const MEDAL = ["\uD83E\uDD47", "\uD83E\uDD48", "\uD83E\uDD49"];
 
 export function StandingsPage(p) {
   const T = useT();
   const [range, setRange] = useState("all");
-  const [board, setBoard] = useState("champions");
+  const [board, setBoard] = useState("hosts");
 
   const from = useMemo(() => {
     if (range === "90") return p.now - 90 * DAY;
@@ -26,20 +25,15 @@ export function StandingsPage(p) {
     h("div", { style: { fontFamily: DISPLAY, fontSize: 26, lineHeight: 1 } }, n),
     h("div", { className: "mt-1", style: { fontFamily: MONO, fontSize: 8, letterSpacing: "0.16em", color: T.muted } }, label));
 
-  const metricFor = (row) =>
-    board === "hosts" ? row.hosted + " HOSTED"
-      : board === "regulars" ? row.joined + " JOINED"
-      : row.wins + "W \u00B7 " + row.points + " PTS";
+  const metricFor = (row) => board === "hosts" ? row.hosted + " HOSTED" : row.joined + " JOINED";
 
   return h("div", { className: "h-full overflow-y-auto px-4 sm:px-7 pb-8 pt-1" },
     h("div", { className: "mx-auto w-full", style: { maxWidth: 620 } },
 
       h("div", { className: "flex justify-center gap-8 py-4" },
-        stat(s.totals.people, "PEOPLE"), stat(s.totals.wins, "WINS"),
-        stat(s.counted, "EVENTS"), stat(s.totals.hosted, "HOSTED")),
+        stat(s.totals.people, "PEOPLE"), stat(s.counted, "EVENTS"), stat(s.totals.hosted, "HOSTED")),
 
       h("div", { className: "flex gap-1.5 flex-wrap mb-2 justify-center" },
-        h(Chip, { on: board === "champions", onClick: () => setBoard("champions") }, "CHAMPIONS"),
         h(Chip, { on: board === "hosts", onClick: () => setBoard("hosts") }, "HOSTS"),
         h(Chip, { on: board === "regulars", onClick: () => setBoard("regulars") }, "REGULARS")),
 
@@ -53,17 +47,15 @@ export function StandingsPage(p) {
             h(Trophy, { size: 20, style: { color: T.muted, margin: "0 auto 12px" } }),
             h("div", { style: { fontFamily: DISPLAY, fontSize: 19 } }, "No standings yet"),
             h("p", { className: "mt-2 text-sm", style: { color: T.muted } },
-              board === "champions" ? "Log some winners on your events and they'll show up here."
-                : board === "hosts" ? "Tag hosts on your events and they'll rank here."
+              board === "hosts" ? "Tag hosts on your events and they'll show up here."
                 : "Add participants to your events to see your regulars."))
         : h("div", { className: "space-y-2" }, rows.map((row, i) => {
-            const top = i < 3 && board === "champions";
+            const top = false;
             return h("div", { key: row.key, className: "p-3 rounded-xl flex items-center gap-3",
               style: { background: T.panel,
                 border: "1px solid " + (top ? T.gold + "44" : T.hair) } },
               h("div", { className: "text-center", style: { width: 26, flexShrink: 0 } },
-                top ? h("span", { style: { fontSize: 16 } }, MEDAL[i])
-                    : h("span", { style: { fontFamily: MONO, fontSize: 11, color: T.muted } }, String(i + 1).padStart(2, "0"))),
+                h("span", { style: { fontFamily: MONO, fontSize: 11, color: T.muted } }, String(i + 1).padStart(2, "0"))),
               h(Avatar, { name: row.name, size: 32 }),
               h("div", { className: "flex-1 min-w-0" },
                 h("div", { className: "truncate inline-flex items-center gap-1.5", style: { fontFamily: DISPLAY, fontSize: 16 } },
@@ -79,7 +71,5 @@ export function StandingsPage(p) {
           })),
 
       rows.length > 0 ? h("div", { className: "mt-5 text-xs text-center", style: { color: T.muted } },
-        board === "champions"
-          ? "Points: 5 for a win, 3 for second, 2 for third, 1 for any other placement, 2 for hosting."
-          : "Ranked by count.") : null));
+        "Counted from the hosts and participants on each event.") : null));
 }
