@@ -4,7 +4,15 @@ export const BackStack = {
   push(fn) { this.h.push(fn); return () => { const i = this.h.indexOf(fn); if (i >= 0) this.h.splice(i, 1); }; },
   pop() { for (let i = this.h.length - 1; i >= 0; i--) { try { if (this.h[i]()) return true; } catch (e) {} } return false; },
 };
-export function goBack() { if (!BackStack.pop()) window.dispatchEvent(new Event("et-back")); }
+let lastBack = 0;
+/* A single swipe can reach us twice — once from our own touch handler and once
+   from the browser's popstate. Collapse anything within 400ms into one step. */
+export function goBack() {
+  const now = Date.now();
+  if (now - lastBack < 400) return;
+  lastBack = now;
+  if (!BackStack.pop()) window.dispatchEvent(new Event("et-back"));
+}
 
 /* The phone's own edge-swipe fires the browser's back navigation, which used to
    unload the page — and a reload always lands on the home screen. So we keep a
@@ -54,7 +62,7 @@ export function installGestures() {
   };
   window.addEventListener("touchstart", (e) => {
     const t = e.touches[0];
-    if (t.clientX < 30) { sw = { x: t.clientX, y: t.clientY, t: Date.now() }; hint(t.clientY); } else sw = null;
+    if (t.clientX < 44) { sw = { x: t.clientX, y: t.clientY, t: Date.now() }; hint(t.clientY); } else sw = null;
   }, { passive: true });
   window.addEventListener("touchmove", (e) => {
     if (!sw || !hintEl) return;
@@ -65,9 +73,9 @@ export function installGestures() {
     if (!sw) { clearHint(false); return; }
     const t = e.changedTouches[0];
     const dx = t.clientX - sw.x, dy = Math.abs(t.clientY - sw.y);
-    const fire = dx > 70 && dy < 70 && Date.now() - sw.t < 700;
+    const fire = dx > 60 && dy < 80 && Date.now() - sw.t < 900;
     clearHint(fire);
-    if (fire && !window.__etHistory) goBack();
+    if (fire) goBack();
     sw = null;
   }, { passive: true });
   window.addEventListener("touchcancel", () => { sw = null; clearHint(false); }, { passive: true });
