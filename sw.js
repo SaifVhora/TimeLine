@@ -3,7 +3,7 @@
    The app's own code is fetched network-first: a deploy is picked up on the
    next load, never a stale mix of old and new modules. The cache is only a
    fallback for when there's no connection. */
-const CACHE = "events-timeline-v12";
+const CACHE = "events-timeline-v13";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["./", "./index.html"])).catch(() => {}));
