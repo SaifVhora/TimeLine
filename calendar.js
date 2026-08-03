@@ -1,6 +1,7 @@
 import { h, useState, useMemo, useEffect, useRef, useCallback } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
-import { useT, Btn } from "../ui/atoms.js";
+import { useT, useInput, Btn, Label, Toggle } from "../ui/atoms.js";
+import { Modal } from "../ui/modal.js";
 import { ChevronLeft, ChevronRight, Plus, Trophy, Download, Crosshair } from "../icons.js";
 import { exportCalendarPNG } from "../timeline/calendar-png.js";
 import { DAY, MIN, startOfDay, sameDay, fmtTime, fmtDay, fmtD } from "../lib/time.js";
@@ -11,6 +12,9 @@ export function CalendarPage(p) {
   const [cursor, setCursor] = useState(() => { const d = new Date(p.now); d.setDate(1); d.setHours(0,0,0,0); return d; });
   const [picked, setPicked] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exOpts, setExOpts] = useState({ showList: true, showPast: true, caption: "" });
+  const wheelAt = useRef(0);
   const rowRefs = useRef({});
   const touch = useRef(null);
 
@@ -61,6 +65,31 @@ export function CalendarPage(p) {
     return () => window.removeEventListener("keydown", onKey);
   }, [step]);
 
+  /* Scrolling over the grid changes month — but only when it won't steal the
+     page scroll. Sideways gestures always count; up/down only when the page
+     has nothing left to scroll. */
+  const onWheel = (e) => {
+    const t = Date.now();
+    if (t - wheelAt.current < 420) return;          /* one month per gesture, not twenty */
+
+    const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    let delta = sideways ? e.deltaX : e.deltaY;
+    if (Math.abs(delta) < 12) return;
+
+    if (!sideways) {
+      const box = e.currentTarget.closest(".overflow-y-auto") || document.scrollingElement;
+      if (box) {
+        const room = box.scrollHeight - box.clientHeight;
+        const atTop = box.scrollTop <= 1, atEnd = box.scrollTop >= room - 1;
+        /* let the page scroll normally unless we're already at the end of it */
+        if (room > 4 && !(delta > 0 ? atEnd : atTop)) return;
+      }
+    }
+
+    wheelAt.current = t;
+    step(delta > 0 ? 1 : -1);
+  };
+
   /* swipe sideways to change month; left edge left alone for the back gesture */
   const onTouchStart = (e) => {
     const t = e.touches[0];
@@ -88,9 +117,11 @@ export function CalendarPage(p) {
   };
 
   const doExport = async () => {
+    setExportOpen(false);
     setBusy(true);
     try {
-      const ok = await exportCalendarPNG({ serverName: p.serverName, monthStart, events: p.events, T, now: p.now });
+      const ok = await exportCalendarPNG({ serverName: p.serverName, monthStart, events: p.events, T, now: p.now,
+        showList: exOpts.showList, showPast: exOpts.showPast, caption: exOpts.caption });
       p.ping && p.ping(ok ? "Calendar saved to your downloads" : "The browser blocked the download", !ok);
     } catch (err) {
       p.ping && p.ping("Export failed: " + (err && err.message ? err.message : "unknown"), true);
@@ -158,7 +189,7 @@ export function CalendarPage(p) {
             monthList.length + " EVENT" + (monthList.length === 1 ? "" : "S"))),
         h("div", { className: "ml-auto flex items-center gap-1.5 flex-wrap" },
           action("TODAY", h(Crosshair, { size: 11 }), jumpToday),
-          action(busy ? "RENDERING" : "EXPORT", h(Download, { size: 11 }), doExport, "busy"),
+          action(busy ? "RENDERING" : "EXPORT", h(Download, { size: 11 }), () => setExportOpen(true), "busy"),
           p.canCreate ? action("NEW", h(Plus, { size: 11 }), () => p.onAddOn(picked || startOfDay(p.now)), "gold") : null)),
 
       h("div", { className: "flex flex-col lg:flex-row gap-5" },
@@ -170,7 +201,7 @@ export function CalendarPage(p) {
               h("div", { key: i, className: "text-center",
                 style: { fontFamily: MONO, fontSize: 8.5, color: T.muted, letterSpacing: "0.14em" } }, w))),
 
-          h("div", { className: "grid grid-cols-7 gap-1.5", onTouchStart, onTouchEnd }, cells.map((c, i) => {
+          h("div", { className: "grid grid-cols-7 gap-1.5", onTouchStart, onTouchEnd, onWheel }, cells.map((c, i) => {
             if (!c) return h("div", { key: "p" + i });
             const key = startOfDay(c);
             const list = byDay[key] || [];
@@ -197,7 +228,7 @@ export function CalendarPage(p) {
           })),
 
           h("div", { className: "mt-3", style: { fontFamily: MONO, fontSize: 8.5, color: T.muted, letterSpacing: "0.12em" } },
-            "SWIPE OR USE \u2190 \u2192 TO CHANGE MONTH \u00B7 TAP A DAY TO HIGHLIGHT IT")),
+            "SWIPE SIDEWAYS, SCROLL OR USE \u2190 \u2192 TO CHANGE MONTH \u00B7 TAP A DAY TO HIGHLIGHT IT")),
 
         /* ── month list ── */
         h("div", { className: "lg:w-[320px] lg:shrink-0" },
@@ -212,5 +243,40 @@ export function CalendarPage(p) {
               ? h("div", { className: "py-10 text-center text-sm", style: { color: T.muted } },
                   "Nothing this month.")
               : h("div", { className: "overflow-y-auto scroller", style: { maxHeight: "min(62vh, 560px)" } },
-                  monthList.map(listRow)))))));
+                  monthList.map(listRow))))),
+
+      h(ExportDialog, { open: exportOpen, onClose: () => setExportOpen(false),
+        monthName, count: monthList.length, opts: exOpts, setOpts: setExOpts, onGo: doExport })));
+}
+
+export function ExportDialog(p) {
+  const T = useT();
+  const input = useInput();
+  const upcoming = p.count;
+  return h(Modal, { open: p.open, onClose: p.onClose },
+    h("div", { className: "p-6" },
+      h("div", { style: { fontFamily: DISPLAY, fontSize: 20 } }, "Export " + p.monthName),
+      h("p", { className: "mt-1.5 mb-4 text-sm", style: { color: T.body } },
+        "Saved as a PNG you can drop straight into Discord."),
+
+      h("div", { className: "space-y-3" },
+        h(Toggle, { on: p.opts.showList, label: "List the event names down the side",
+          onChange: (v) => p.setOpts({ ...p.opts, showList: v }) }),
+        h(Toggle, { on: p.opts.showPast, label: "Include events that already finished",
+          onChange: (v) => p.setOpts({ ...p.opts, showPast: v }) })),
+
+      h("div", { className: "mt-4" },
+        h(Label, null, "Caption (optional)"),
+        h("input", { style: input, value: p.opts.caption, maxLength: 60,
+          onChange: (e) => p.setOpts({ ...p.opts, caption: e.target.value }),
+          placeholder: "e.g. August line-up \u2014 come hang out" })),
+
+      h("div", { className: "mt-4 p-3 rounded-lg text-xs",
+        style: { background: T.panel, border: "1px solid " + T.hair, color: T.muted } },
+        "The image includes the month grid" + (p.opts.showList ? " and a list of every event" : "") + ". " +
+        (p.opts.showPast ? "Finished events appear greyed out." : "Only upcoming events are shown.")),
+
+      h("div", { className: "mt-5 flex gap-2" },
+        h(Btn, { tone: "solid", full: true, onClick: p.onGo }, h(Download, { size: 13 }), " Save the image"),
+        h(Btn, { onClick: p.onClose }, "Cancel"))));
 }
