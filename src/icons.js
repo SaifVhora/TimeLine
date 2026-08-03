@@ -53,6 +53,7 @@ export const KeyRound = ic('<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.
 export const Eye = ic('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>');
 export const EyeOff = ic('<path d="M9.9 5A9.7 9.7 0 0 1 12 5c6 0 10 7 10 7a13 13 0 0 1-2.3 2.9M6.6 6.6A13 13 0 0 0 2 12s4 7 10 7a9.5 9.5 0 0 0 4.7-1.2M2 2l20 20"/>');
 export const Download = ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>');
+export const TextSize = ic('<path d="M4 20V7M4 7h9M8.5 7v13"/><path d="M14 20v-8M14 12h6M17 12v8"/>');
 
 export const Upload = ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>');
 export const History = ic('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>');

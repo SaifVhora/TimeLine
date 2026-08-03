@@ -8,7 +8,7 @@ import { copy } from "../lib/util.js";
 import { evHosts, evStart } from "../lib/events.js";
 import { canEditEvent } from "../auth/roles.js";
 import { buildTodo } from "../lib/todo.js";
-import { Nav } from "./nav.js";
+import { Nav, pagesFor } from "./nav.js";
 import { TimelinePage } from "./timeline.js";
 import { NowPage } from "./now.js";
 import { CalendarPage } from "./calendar.js";
@@ -20,6 +20,8 @@ import { Editor, blankEvent } from "../events/editor.js";
 export function ServerView(p) {
   const T = useT();
   const [page, setPage] = useState("timeline");
+  /* create/edit rights are what make someone "staff" for navigation purposes */
+  const isStaff = !!(p.auth.create || p.auth.edit || p.auth.editOwn || p.auth.delete || p.auth.members);
   const [editing, setEditing] = useState(null);
   const [detail, setDetail] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -68,18 +70,23 @@ export function ServerView(p) {
     setEditing({ ...b, start: s.toISOString() });
   };
 
+  /* if rights change while you're on a staff page, fall back to the timeline */
+  useEffect(() => {
+    if (!isStaff && (page === "now" || page === "standings")) setPage("timeline");
+  }, [isStaff, page]);
+
   const shared = { events, now: p.now, onOpen: setDetail, names,
     canCreate: p.auth.create, canEdit: p.auth.edit, onAdd: addBlank };
 
   return h(Fragment, null,
-    h(Nav, { page, onGo: setPage, todo: todo.count }),
+    h(Nav, { page, onGo: setPage, todo: todo.count, isStaff }),
 
     h("div", { className: "flex-1 min-h-0 flex flex-col" },
       page === "timeline" ? h(TimelinePage, { ...shared, server: p.server, auth: p.auth, ping: p.ping }) : null,
-      page === "now" ? h(NowPage, shared) : null,
-      page === "calendar" ? h(CalendarPage, { ...shared, onAddOn: addOnDay }) : null,
+      page === "now" && isStaff ? h(NowPage, shared) : null,
+      page === "calendar" ? h(CalendarPage, { ...shared, onAddOn: addOnDay, serverName: p.server.name, ping: p.ping }) : null,
       page === "archive" ? h(ArchivePage, shared) : null,
-      page === "standings" ? h(StandingsPage, shared) : null),
+      page === "standings" && isStaff ? h(StandingsPage, shared) : null),
 
     h(Detail, { ev: detail, now: p.now, names, onClose: () => setDetail(null),
       perms: { edit: canEditEvent(p.auth, detail, p.me), delete: p.auth.delete },

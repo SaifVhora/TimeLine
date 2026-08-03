@@ -2,7 +2,7 @@ import React, { h, useState, useEffect, useMemo, useCallback, useRef } from "./r
 import { THEME, BODY, DISPLAY, MONO, globalCSS } from "./theme.js";
 import { ThemeCtx, useT, Btn } from "./ui/atoms.js";
 import { installGestures, installHistoryTrap, BackStack } from "./ui/gestures.js";
-import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, Lock } from "./icons.js";
+import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, Lock, TextSize } from "./icons.js";
 import { PASS_SALT } from "./config.js";
 import { EMPTY, configured, normalize, mergeDB, readRemote, writeRemote, cache } from "./store/db.js";
 import { maybeSnapshot } from "./store/backup.js";
@@ -39,6 +39,7 @@ function App() {
   const [db, setDb] = useState(() => cache.db() || normalize(null));
   const [me, setMe] = useState(null);
   const [mode, setMode] = useState(() => (cache.pref() || {}).mode || "dark");
+  const [textSize, setTextSize] = useState(() => (cache.pref() || {}).textSize || 1);
   const [booted, setBooted] = useState(false);
   const [conn, setConn] = useState("syncing");
   const [lastSync, setLastSync] = useState(null);
@@ -171,7 +172,19 @@ function App() {
     saveMe({ ...me, ...(name ? { name: name.trim() } : {}), ...(hash ? { hasPass: true } : {}) });
   };
 
-  const flip = () => { const next = mode === "dark" ? "light" : "dark"; setMode(next); cache.savePref({ mode: next }); };
+  const savePref = (patch) => cache.savePref({ mode, textSize, ...patch });
+  const flip = () => { const next = mode === "dark" ? "light" : "dark"; setMode(next); savePref({ mode: next }); };
+
+  /* three text sizes — scales the whole interface, not just body copy */
+  const STEPS = [1, 1.12, 1.28];
+  const bumpText = () => {
+    const next = STEPS[(STEPS.indexOf(textSize) + 1) % STEPS.length] || 1;
+    setTextSize(next); savePref({ textSize: next });
+    ping(next === 1 ? "Text size: normal" : next === 1.12 ? "Text size: large" : "Text size: largest");
+  };
+  useEffect(() => {
+    try { document.documentElement.style.zoom = textSize === 1 ? "" : String(textSize); } catch (e) {}
+  }, [textSize]);
 
   if (!booted || auth.state === "loading")
     return h(ThemeCtx.Provider, { value: T }, h(Gate, { T },
@@ -218,6 +231,10 @@ function App() {
           h(SyncLine, { conn, lastSync,
             count: view === "timeline" ? allEvents.filter((e) => e.serverId === serverId).length : servers.length,
             unit: view === "timeline" ? "EVENTS" : "SERVERS" })),
+        h(Btn, { size: "sm", onClick: bumpText, title: "Text size" },
+          h(TextSize, { size: 13 }),
+          textSize !== 1 ? h("span", { style: { fontFamily: MONO, fontSize: 8, marginLeft: 2 } },
+            textSize === 1.12 ? "L" : "XL") : null),
         h(Btn, { size: "sm", onClick: flip, title: "Switch theme" }, mode === "dark" ? h(Sun, { size: 13 }) : h(Moon, { size: 13 })),
         h(Btn, { size: "sm", onClick: () => sync(true), title: "Sync" }, h(RotateCw, { size: 13, className: conn === "syncing" ? "spin" : "" })),
         canOpenAdmin(auth) ? h("div", { className: "relative" },

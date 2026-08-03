@@ -1,7 +1,8 @@
-import { h, useState, useMemo, useEffect, useRef } from "../react.js";
+import { h, useState, useMemo, useEffect, useRef, useCallback } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, Btn } from "../ui/atoms.js";
-import { ChevronLeft, ChevronRight, Plus, Trophy, Users, Paperclip } from "../icons.js";
+import { ChevronLeft, ChevronRight, Plus, Trophy, Download } from "../icons.js";
+import { exportCalendarPNG } from "../timeline/calendar-png.js";
 import { DAY, MIN, startOfDay, sameDay, fmtTime, fmtDay } from "../lib/time.js";
 import { evStart, evEnd, evColor, evShort, evRange, evHosts, statusOf } from "../lib/events.js";
 
@@ -11,6 +12,9 @@ export function CalendarPage(p) {
   const [picked, setPicked] = useState(null);
   const listRef = useRef(null);
   const rowRefs = useRef({});
+  const gridRef = useRef(null);
+  const touch = useRef(null);
+  const [busy, setBusy] = useState(false);
 
   const monthStart = cursor.getTime();
   const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1).getTime();
@@ -55,7 +59,44 @@ export function CalendarPage(p) {
     if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [picked]);
 
-  const step = (n) => { setPicked(null); setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + n, 1)); };
+  const step = useCallback((n) => {
+    setPicked(null);
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + n, 1));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.key === "ArrowLeft") step(-1);
+      if (e.key === "ArrowRight") step(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [step]);
+
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    touch.current = t.clientX < 50 ? null : { x: t.clientX, y: t.clientY, at: Date.now() };
+  };
+  const onTouchEnd = (e) => {
+    if (!touch.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.current.x, dy = Math.abs(t.clientY - touch.current.y);
+    if (Math.abs(dx) > 55 && dy < 60 && Date.now() - touch.current.at < 800) step(dx < 0 ? 1 : -1);
+    touch.current = null;
+  };
+
+  const doExport = async () => {
+    setBusy(true);
+    try {
+      const ok = await exportCalendarPNG({ serverName: p.serverName, monthStart, events: p.events, T, now: p.now });
+      p.ping && p.ping(ok ? "Calendar saved to your downloads" : "The browser blocked the download", !ok);
+    } catch (err) {
+      p.ping && p.ping("Export failed: " + (err && err.message ? err.message : "unknown"), true);
+    }
+    setBusy(false);
+  };
   const jumpToday = () => { const d = new Date(p.now); setCursor(new Date(d.getFullYear(), d.getMonth(), 1)); setPicked(startOfDay(p.now)); };
 
   const dayOf = (ev) => Math.max(startOfDay(evStart(ev)), monthStart);
@@ -103,8 +144,13 @@ export function CalendarPage(p) {
           h("div", { className: "flex-1 text-center" },
             h("div", { style: { fontFamily: DISPLAY, fontSize: 24, lineHeight: 1.1 } },
               cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" })),
-            h("button", { onClick: jumpToday, style: { fontFamily: MONO, fontSize: 9, color: T.gold,
-              letterSpacing: "0.16em", background: "none", border: "none", cursor: "pointer" } }, "TODAY")),
+            h("div", { className: "flex items-center justify-center gap-3" },
+              h("button", { onClick: jumpToday, style: { fontFamily: MONO, fontSize: 9, color: T.gold,
+                letterSpacing: "0.16em", background: "none", border: "none", cursor: "pointer" } }, "TODAY"),
+              h("button", { onClick: doExport, disabled: busy, className: "inline-flex items-center gap-1",
+                style: { fontFamily: MONO, fontSize: 9, color: busy ? T.gold : T.muted,
+                  letterSpacing: "0.16em", background: "none", border: "none", cursor: "pointer" } },
+                h(Download, { size: 10 }), busy ? "RENDERING" : "EXPORT PNG"))),
           h("button", { onClick: () => step(1), style: { color: T.muted, background: "none", border: "none", cursor: "pointer" } },
             h(ChevronRight, { size: 18 }))),
 
@@ -112,7 +158,8 @@ export function CalendarPage(p) {
           ["M","T","W","T","F","S","S"].map((w, i) =>
             h("div", { key: i, className: "text-center", style: { fontFamily: MONO, fontSize: 8.5, color: T.muted, letterSpacing: "0.14em" } }, w))),
 
-        h("div", { className: "grid grid-cols-7 gap-1" }, cells.map((c, i) => {
+        h("div", { ref: gridRef, className: "grid grid-cols-7 gap-1",
+          onTouchStart: onTouchStart, onTouchEnd: onTouchEnd }, cells.map((c, i) => {
           if (!c) return h("div", { key: "p" + i });
           const key = startOfDay(c);
           const list = byDay[key] || [];
@@ -120,17 +167,29 @@ export function CalendarPage(p) {
           const isPicked = picked === key;
           return h("button", { key: key, onClick: () => setPicked(isPicked ? null : key),
             className: "relative rounded-lg p-1.5 text-left",
-            style: { minHeight: 58, cursor: "pointer",
+            style: { minHeight: 74, cursor: "pointer",
               background: isPicked ? T.solidBtn : list.length ? T.panel : "transparent",
               border: "1px solid " + (isPicked ? "transparent" : isToday ? T.gold + "77" : T.hair),
               transition: "background .15s ease" } },
             h("div", { style: { fontFamily: MONO, fontSize: 10,
               color: isPicked ? T.solidInk : isToday ? T.gold : T.body } }, c.getDate()),
-            h("div", { className: "mt-1 flex flex-wrap gap-0.5" }, list.slice(0, 4).map((ev, k) =>
+            h("div", { className: "mt-1 flex flex-wrap gap-0.5 sm:hidden" }, list.slice(0, 4).map((ev, k) =>
               h("span", { key: ev.id + k, style: { width: 5, height: 5, borderRadius: 5,
                 background: statusOf(ev, p.now) === "past" ? T.silver : evColor(ev),
                 opacity: statusOf(ev, p.now) === "past" ? 0.55 : 1, display: "inline-block" } }))),
-            list.length > 4 ? h("div", { style: { fontFamily: MONO, fontSize: 7.5,
+            h("div", { className: "hidden sm:block mt-1 space-y-0.5" }, list.slice(0, 3).map((ev) => {
+              const est = statusOf(ev, p.now);
+              const ecol = est === "past" ? T.silver : evColor(ev);
+              return h("div", { key: ev.id, className: "truncate flex items-center gap-1",
+                style: { fontSize: 9.5, lineHeight: 1.3,
+                  color: isPicked ? T.solidInk : est === "past" ? T.muted : T.body } },
+                h("span", { style: { width: 4, height: 4, borderRadius: 4, background: ecol,
+                  flexShrink: 0, display: "inline-block" } }),
+                h("span", { className: "truncate" }, ev.title));
+            })),
+            list.length > 3 ? h("div", { className: "hidden sm:block", style: { fontFamily: MONO, fontSize: 7.5,
+              color: isPicked ? T.solidInk : T.muted } }, "+" + (list.length - 3) + " more") : null,
+            list.length > 4 ? h("div", { className: "sm:hidden", style: { fontFamily: MONO, fontSize: 7.5,
               color: isPicked ? T.solidInk : T.muted } }, "+" + (list.length - 4)) : null,
             list.length > 1 && !isPicked ? h("span", { style: { position: "absolute", top: 4, right: 4,
               width: 4, height: 4, borderRadius: 4, background: T.soon, display: "inline-block" } }) : null);
@@ -141,7 +200,7 @@ export function CalendarPage(p) {
           h("span", { className: "inline-flex items-center gap-1.5" },
             h("span", { style: { width: 4, height: 4, borderRadius: 4, background: T.soon, display: "inline-block" } }),
             "MORE THAN ONE THAT DAY"),
-          h("span", null, "TAP A DAY TO FIND IT IN THE LIST")),
+          h("span", null, "SWIPE OR USE \u2190 \u2192 TO CHANGE MONTH")),
 
         picked && p.canCreate ? h("div", { className: "mt-3" },
           h(Btn, { size: "sm", tone: "gold", full: true, onClick: () => p.onAddOn(picked) },

@@ -3,18 +3,21 @@ import { MONO } from "../theme.js";
 import { useT } from "../ui/atoms.js";
 
 export const PAGES = [
-  { id: "now", label: "now" },
+  { id: "now", label: "now", staff: true },
   { id: "timeline", label: "timeline" },
   { id: "calendar", label: "calendar" },
   { id: "archive", label: "archive" },
-  { id: "standings", label: "people" },
+  { id: "standings", label: "people", staff: true },
 ];
+
+/* guests and viewers only get the pages they can actually use */
+export const pagesFor = (isStaff) => PAGES.filter((p) => !p.staff || isStaff);
 
 export function Nav(p) {
   const T = useT();
   return h("div", { className: "shrink-0 px-4 sm:px-7 pt-2.5 pb-1 overflow-x-auto scroller" },
     h("div", { className: "flex items-center gap-5", style: { width: "max-content", minWidth: "100%" } },
-      PAGES.map((pg) => {
+      pagesFor(p.isStaff).map((pg) => {
         const on = p.page === pg.id;
         const badge = pg.id === "now" ? p.todo : 0;
         return h("button", { key: pg.id, onClick: () => p.onGo(pg.id),
