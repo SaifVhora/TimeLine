@@ -15,9 +15,9 @@ export const THEME = {
     text: "#0A1020", body: "#39415A", muted: "#6B7590",
     hair: "rgba(16,22,44,0.14)", panel: "rgba(16,22,44,0.045)", field: "#FFFFFF",
     sheet: "#FFFFFF", bar: "rgba(255,255,255,0.9)",
-    current: "#3A2FD4", currentSoft: "#6F63F0", bloom: "rgba(90,74,220,.28)",
+    current: "#2A21B8", currentSoft: "#4B3FE0", bloom: "rgba(70,58,190,.16)",
     silver: "#8B94AD", gold: "#946A00", live: "#097A57", soon: "#A85F00", danger: "#C42B3C",
-    star: "74,86,150", nebulaA: "rgba(110,120,230,.16)", nebulaB: "rgba(190,130,230,.12)",
+    star: "88,98,150", nebulaA: "rgba(110,120,230,.10)", nebulaB: "rgba(190,130,230,.08)",
     solidBtn: "#0A1020", solidInk: "#FFFFFF", isDark: false,
     inkA: "#FFFFFF", inkB: "#E8EBF5",
   }
@@ -48,8 +48,8 @@ export const globalCSS = (T) => `
   @keyframes zoomOutStage { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
   @keyframes swipeHint { from { opacity: .9; transform: translateX(0); } to { opacity: 0; transform: translateX(26px); } }
   @keyframes floatUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-  .flame { background-image: linear-gradient(90deg, transparent 0%, ${T.current}33 20%, ${T.current} 45%, ${T.currentSoft} 55%, ${T.current}33 80%, transparent 100%);
-           background-size: 900px 100%; animation: flow 6s linear infinite; opacity: ${T.isDark ? 1 : 0.92}; }
+  .flame { background-image: linear-gradient(90deg, transparent 0%, ${T.current}55 15%, ${T.current} 45%, ${T.currentSoft} 55%, ${T.current}55 85%, transparent 100%);
+           background-size: 900px 100%; animation: flow 6s linear infinite; }
   .ember { animation: emberA 7s linear infinite; }
   .twinkle { animation: twinkle 4s ease-in-out infinite; }
   .breathe { animation: breathe 2.6s ease-in-out infinite; }

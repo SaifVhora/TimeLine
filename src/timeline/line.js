@@ -2,14 +2,15 @@ import { h, useState, useEffect, useMemo, useCallback, useRef, Fragment } from "
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, Btn } from "../ui/atoms.js";
 import { Stars } from "../ui/stars.js";
-import { BackStack } from "../ui/gestures.js";
-import { Crosshair, ArrowLeft, Plus, Download } from "../icons.js";
+import { BackStack, goBack } from "../ui/gestures.js";
+import { Crosshair, ArrowLeft, ChevronLeft, ChevronRight, Plus, Download } from "../icons.js";
 import { PAD_X } from "../config.js";
 import { DAY, MIN, startOfDay, fmtDay } from "../lib/time.js";
 import { evStart, evEnd, evColor, statusOf } from "../lib/events.js";
 import { layoutCards, layoutBands, statusColors } from "./lanes.js";
 import { TimelineNode } from "./node.js";
 import { exportMonthPNG } from "./export.js";
+import { ExportDialog } from "../ui/export-dialog.js";
 
 export function Line(p) {
   const T = useT();
@@ -21,10 +22,48 @@ export function Line(p) {
   const [monthLabel, setMonthLabel] = useState("");
   const [focus, setFocus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exOpts, setExOpts] = useState({ showList: true, showPast: true, caption: "" });
   const drag = useRef({ on: false, x: 0, left: 0, moved: 0 });
   const centered = useRef(false);
 
   const unfocus = () => { centered.current = false; setFocus(null); };
+
+  /* while zoomed into a month, step to the next or previous one */
+  const stepMonth = useCallback((n) => {
+    setFocus((f) => {
+      if (!f) return f;
+      const d = new Date(f.start);
+      const s2 = new Date(d.getFullYear(), d.getMonth() + n, 1);
+      const e2 = new Date(d.getFullYear(), d.getMonth() + n + 1, 1);
+      return { start: s2.getTime(), end: e2.getTime(),
+        label: s2.toLocaleDateString(undefined, { month: "long" }), year: s2.getFullYear() };
+    });
+  }, []);
+
+  const wheelAt = useRef(0);
+  const swipe = useRef(null);
+  const onMonthWheel = (e) => {
+    if (!focus) return;
+    const t = Date.now();
+    if (t - wheelAt.current < 420) return;
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(d) < 12) return;
+    wheelAt.current = t;
+    stepMonth(d > 0 ? 1 : -1);
+  };
+  const onMonthTouchStart = (e) => {
+    if (!focus) { swipe.current = null; return; }
+    const t = e.touches[0];
+    swipe.current = t.clientX < 50 ? null : { x: t.clientX, y: t.clientY, at: Date.now() };
+  };
+  const onMonthTouchEnd = (e) => {
+    if (!swipe.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.current.x, dy = Math.abs(t.clientY - swipe.current.y);
+    if (Math.abs(dx) > 55 && dy < 60 && Date.now() - swipe.current.at < 800) stepMonth(dx < 0 ? 1 : -1);
+    swipe.current = null;
+  };
   useEffect(() => { if (!focus) return; return BackStack.push(() => { unfocus(); return true; }); }, [focus]);
 
   useEffect(() => {
@@ -110,7 +149,15 @@ export function Line(p) {
     setHover(Math.abs(e.clientY - rect.top - lineY) < ARM + 30 ? { x, t: tOf(x) } : null);
   };
 
+  const exportTitle = () => {
+    if (focus) return focus.label + " " + focus.year;
+    const el = scroller.current;
+    const centre = new Date(tOf(el ? el.scrollLeft + el.clientWidth / 2 : 0));
+    return centre.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  };
+
   const doExport = async () => {
+    setExportOpen(false);
     let mStart, mEnd;
     if (focus) { mStart = focus.start; mEnd = focus.end; }
     else {
@@ -121,7 +168,9 @@ export function Line(p) {
     }
     setBusy(true);
     try {
-      const ok = await exportMonthPNG({ serverName: p.serverName, monthStart: mStart, monthEnd: mEnd, events: p.events, T, now: p.now });
+      const ok = await exportMonthPNG({ serverName: p.serverName, monthStart: mStart, monthEnd: mEnd,
+        events: p.events, T, now: p.now,
+        showList: exOpts.showList, showPast: exOpts.showPast, caption: exOpts.caption });
       p.ping && p.ping(ok ? "Image saved to your downloads" : "The browser blocked the download", !ok);
     } catch (e) {
       p.ping && p.ping("Export failed: " + (e && e.message ? e.message : "unknown"), true);
@@ -135,15 +184,24 @@ export function Line(p) {
     h("div", { className: "shrink-0 px-4 sm:px-7 pt-3 pb-1 flex items-end gap-3 flex-wrap" },
       h("div", { style: { fontFamily: DISPLAY, fontSize: compact ? 22 : 28, letterSpacing: "0.03em", lineHeight: 1 } },
         focus ? focus.label + " " + focus.year : monthLabel),
+      focus ? h("div", { className: "mb-1 flex items-center gap-1" },
+        h("button", { onClick: () => stepMonth(-1), "aria-label": "Previous month",
+          style: { width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center",
+            background: "transparent", border: "1px solid " + T.hair, color: T.body, cursor: "pointer" } },
+          h(ChevronLeft, { size: 13 })),
+        h("button", { onClick: () => stepMonth(1), "aria-label": "Next month",
+          style: { width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center",
+            background: "transparent", border: "1px solid " + T.hair, color: T.body, cursor: "pointer" } },
+          h(ChevronRight, { size: 13 }))) : null,
       focus
-        ? h("button", { onClick: unfocus, className: "mb-1 inline-flex items-center gap-1.5",
+        ? h("button", { onClick: goBack, className: "mb-1 inline-flex items-center gap-1.5",
             style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: T.gold, background: "none", border: "none", cursor: "pointer" } },
             h(ArrowLeft, { size: 11 }), " FULL LINE")
         : h("button", { onClick: () => { const el = scroller.current; if (el) el.scrollTo({ left: xOf(Date.now()) - el.clientWidth / 2, behavior: "smooth" }); },
             className: "mb-1 inline-flex items-center gap-1.5",
             style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: T.gold, background: "none", border: "none", cursor: "pointer" } },
             h(Crosshair, { size: 11 }), " JUMP TO NOW"),
-      h("button", { onClick: doExport, disabled: busy, className: "mb-1 inline-flex items-center gap-1.5 ml-auto",
+      h("button", { onClick: () => setExportOpen(true), disabled: busy, className: "mb-1 inline-flex items-center gap-1.5 ml-auto",
         style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: busy ? T.gold : T.muted, background: "none", border: "none", cursor: "pointer" } },
         h(Download, { size: 11 }), busy ? " RENDERING\u2026" : " EXPORT PNG")),
 
@@ -153,7 +211,13 @@ export function Line(p) {
         ref: scroller, className: "scroller h-full overflow-y-hidden",
         style: { cursor: focus ? "default" : "grab", touchAction: "pan-x", overflowX: focus ? "hidden" : "auto",
           animation: focus ? "zoomStage .38s cubic-bezier(.2,.8,.25,1) both" : "zoomOutStage .32s ease both" },
-        onWheel: (e) => { if (focus) return; const el = scroller.current; if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; },
+        onWheel: (e) => {
+          if (focus) { onMonthWheel(e); return; }
+          const el = scroller.current;
+          if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY;
+        },
+        onTouchStart: onMonthTouchStart,
+        onTouchEnd: onMonthTouchEnd,
         onScroll,
         onPointerDown: (e) => { if (!focus && e.pointerType === "mouse") drag.current = { on: true, x: e.clientX, left: scroller.current.scrollLeft, moved: 0 }; },
         onPointerUp: () => { drag.current.on = false; },
@@ -196,8 +260,11 @@ export function Line(p) {
           }),
 
           h("div", { className: "draw absolute", style: { left: 0, right: 0, top: lineY - 1, height: 2, borderRadius: 2, background: T.current + "33" } }),
-          h("div", { className: "draw flame absolute", style: { left: 0, right: 0, top: lineY - 1.5, height: 3, borderRadius: 3,
-            boxShadow: "0 0 10px " + T.current + ", 0 0 30px " + T.bloom + ", 0 0 60px " + T.bloom } }),
+          h("div", { className: "draw flame absolute", style: { left: 0, right: 0, top: lineY - 1.5,
+            height: T.isDark ? 3 : 4, borderRadius: 3,
+            boxShadow: T.isDark
+              ? "0 0 10px " + T.current + ", 0 0 30px " + T.bloom + ", 0 0 60px " + T.bloom
+              : "0 0 6px " + T.bloom } }),
 
           [0, 2.3, 4.6].map((delay, i) => h("div", { key: i, className: "absolute ember",
             style: { left: padX + i * 280, top: lineY - 1, width: 3, height: 3, borderRadius: 3,
@@ -234,5 +301,9 @@ export function Line(p) {
             h("div", { style: { fontFamily: DISPLAY, fontSize: 17 } }, "Nothing happened in " + focus.label)) : null))),
 
     h("div", { className: "shrink-0 px-4 sm:px-7 py-1.5", style: { fontFamily: MONO, fontSize: 9, color: T.muted, letterSpacing: "0.14em" } },
-      focus ? "TAP FULL LINE TO ZOOM BACK OUT \u00B7 TAP A NODE FOR DETAILS" : "DRAG TO TRAVEL \u00B7 TAP A MONTH NAME TO ZOOM IN \u00B7 TAP A NODE FOR DETAILS"));
+      focus ? "SCROLL, SWIPE OR USE THE ARROWS TO CHANGE MONTH \u00B7 TAP A NODE FOR DETAILS"
+            : "DRAG TO TRAVEL \u00B7 TAP A MONTH NAME TO ZOOM IN \u00B7 TAP A NODE FOR DETAILS"),
+
+    h(ExportDialog, { open: exportOpen, onClose: () => setExportOpen(false),
+      title: exportTitle(), opts: exOpts, setOpts: setExOpts, onGo: doExport }));
 }

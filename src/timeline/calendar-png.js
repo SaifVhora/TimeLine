@@ -1,6 +1,7 @@
 /* The calendar month as an image — grid, event names, colours. */
 import { DAY, MIN, startOfDay, sameDay, fmtTime } from "../lib/time.js";
-import { evStart, evEnd, evColor, evShort, evHosts, statusOf } from "../lib/events.js";
+import { evStart, evEnd, evColor, evShort, evHosts, isMultiDay, statusOf } from "../lib/events.js";
+import { fmtD, fmtDay } from "../lib/time.js";
 
 function roundRect(g, x, y, w, hgt, r) {
   const rr = Math.min(r, Math.abs(w) / 2, Math.abs(hgt) / 2);
@@ -24,6 +25,9 @@ const clip = (g, text, maxW) => {
 
 export async function exportCalendarPNG(opts) {
   const { serverName, monthStart, events, T, now } = opts;
+  const showList = opts.showList !== false;      /* event names down the side */
+  const showPast = opts.showPast !== false;      /* include finished events */
+  const caption = (opts.caption || "").trim();
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
 
   const SERIF = "Marcellus, Georgia, serif";
@@ -36,18 +40,27 @@ export async function exportCalendarPNG(opts) {
   const rows = Math.ceil((pad + daysIn) / 7);
 
   const byDay = {};
-  events.forEach((ev) => {
+  const forGrid = events.filter((ev) => showPast || statusOf(ev, now) !== "past");
+  forGrid.forEach((ev) => {
     const s = startOfDay(evStart(ev)), e = evEnd(ev) - MIN;
     for (let t = s; t <= e; t += DAY) {
       if (t < monthStart || t >= monthEnd) continue;
       (byDay[startOfDay(t)] = byDay[startOfDay(t)] || []).push(ev);
     }
   });
-  const total = events.filter((ev) => evEnd(ev) > monthStart && evStart(ev) < monthEnd).length;
+  const inMonth = events
+    .filter((ev) => evEnd(ev) > monthStart && evStart(ev) < monthEnd)
+    .filter((ev) => showPast || statusOf(ev, now) !== "past")
+    .sort((a, b) => evStart(a) - evStart(b));
+  const total = inMonth.length;
 
   const CW = 190, CH = 132, GAP = 8, PADL = 56, HEAD = 168;
-  const W = PADL * 2 + CW * 7 + GAP * 6;
-  const H = HEAD + rows * (CH + GAP) + 84;
+  const LISTW = showList ? 380 : 0;
+  const gridW = CW * 7 + GAP * 6;
+  const W = PADL * 2 + gridW + (showList ? LISTW + 34 : 0);
+  const gridH = rows * (CH + GAP);
+  const listH = showList ? 70 + inMonth.length * 74 : 0;
+  const H = HEAD + Math.max(gridH, listH) + 84 + (caption ? 40 : 0);
 
   const S = 2;
   const c = document.createElement("canvas");
@@ -73,7 +86,12 @@ export async function exportCalendarPNG(opts) {
   g.fillStyle = T.text; g.font = "60px " + SERIF;
   g.fillText(monthName, PADL, 52);
   g.fillStyle = T.muted; g.font = "16px " + MONOF;
-  g.fillText((serverName || "EVENTS").toUpperCase() + "  \u00B7  " + total + " EVENT" + (total === 1 ? "" : "S"), PADL + 2, 124);
+  g.fillText((serverName || "EVENTS").toUpperCase() + "  \u00B7  " + total + " EVENT" + (total === 1 ? "" : "S")
+    + (showPast ? "" : "  \u00B7  UPCOMING ONLY"), PADL + 2, 124);
+  if (caption) {
+    g.fillStyle = T.body; g.font = "19px " + SERIF;
+    g.fillText(caption, PADL + 2, 146);
+  }
 
   const names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   g.font = "13px " + MONOF; g.fillStyle = T.muted;
@@ -121,6 +139,45 @@ export async function exportCalendarPNG(opts) {
       g.fillStyle = T.muted; g.font = "11px " + MONOF;
       g.fillText("+" + (list.length - 3) + " more", x + 10, y + CH - 22);
     }
+  }
+
+  /* ── event names down the side ── */
+  if (showList) {
+    const lx = PADL + gridW + 34;
+    let ly = HEAD - 26;
+    g.fillStyle = T.text; g.font = "24px " + SERIF;
+    g.fillText("All of " + cur.toLocaleDateString(undefined, { month: "long" }), lx, ly);
+    ly += 40;
+
+    if (!inMonth.length) {
+      g.fillStyle = T.muted; g.font = "15px " + MONOF;
+      g.fillText("NOTHING THIS MONTH", lx, ly);
+    }
+
+    inMonth.forEach((ev) => {
+      const st = statusOf(ev, now);
+      const color = st === "past" ? T.silver : evColor(ev);
+      const range = isMultiDay(ev) ? fmtD(evStart(ev)) + " \u2192 " + fmtD(evEnd(ev)) : fmtDay(evStart(ev));
+
+      g.fillStyle = T.muted; g.font = "12px " + MONOF;
+      g.fillText(range.toUpperCase(), lx, ly);
+      ly += 18;
+
+      g.fillStyle = color; g.globalAlpha = st === "past" ? 0.55 : 1;
+      g.beginPath(); g.arc(lx + 4, ly + 9, 4.5, 0, 7); g.fill();
+      g.globalAlpha = 1;
+
+      g.fillStyle = st === "past" ? T.muted : T.text; g.font = "20px " + SERIF;
+      g.fillText(clip(g, ev.title, LISTW - 26), lx + 18, ly);
+      ly += 24;
+
+      const hosts = evHosts(ev);
+      const meta = evShort(ev) + (ev.allDay ? " \u00B7 ALL DAY" : " \u00B7 " + fmtTime(ev.start))
+        + (hosts.length ? " \u00B7 " + hosts.join(", ") : "");
+      g.fillStyle = T.muted; g.font = "12.5px " + MONOF;
+      g.fillText(clip(g, meta, LISTW - 26), lx + 18, ly);
+      ly += 32;
+    });
   }
 
   g.fillStyle = T.muted; g.font = "13px " + MONOF;

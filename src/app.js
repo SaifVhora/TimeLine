@@ -1,7 +1,7 @@
 import React, { h, useState, useEffect, useMemo, useCallback, useRef } from "./react.js";
 import { THEME, BODY, DISPLAY, MONO, globalCSS } from "./theme.js";
 import { ThemeCtx, useT, Btn } from "./ui/atoms.js";
-import { installGestures, installHistoryTrap, BackStack } from "./ui/gestures.js";
+import { installGestures, enterLevel, goBack, BackStack } from "./ui/gestures.js";
 import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, Lock, TextSize } from "./icons.js";
 import { PASS_SALT } from "./config.js";
 import { EMPTY, configured, normalize, mergeDB, readRemote, writeRemote, cache } from "./store/db.js";
@@ -16,7 +16,7 @@ import { hashPass, newKey, uid, fingerprint, appLink } from "./lib/util.js";
 import { nowISO, ago } from "./lib/time.js";
 import { Setup } from "./views/setup.js";
 
-installGestures();
+
 
 function SyncLine(p) {
   const T = useT();
@@ -114,21 +114,24 @@ function App() {
   const server = servers.find((s) => s.id === serverId);
   const pendingCount = db.access.pending.length;
 
-  const enterServer = (s, pos) => { setOrigin(pos); setServerId(s.id); setView("zooming"); setTimeout(() => setView("timeline"), 620); };
+  const enterServer = (s, pos) => {
+    enterLevel();
+    setOrigin(pos); setServerId(s.id); setView("zooming");
+    setTimeout(() => setView("timeline"), 620);
+  };
   const backToHub = () => { setView("leaving"); setTimeout(() => { setView("hub"); setServerId(null); }, 380); };
   const backToHome = () => setView("home");
+  const openHub = () => { enterLevel(); setView("hub"); };
 
-  /* back chain: timeline → hub → home */
+  /* back chain: timeline → hub → home, then the browser is free to leave */
   const viewRef = useRef(view);
   viewRef.current = view;
   useEffect(() => {
-    const onBack = () => {
-      if (viewRef.current === "timeline") backToHub();
-      else if (viewRef.current === "hub") backToHome();
-    };
-    window.addEventListener("et-back", onBack);
-    installHistoryTrap(() => viewRef.current === "home");
-    return () => window.removeEventListener("et-back", onBack);
+    installGestures(() => {
+      const v = viewRef.current;
+      if (v === "timeline" || v === "zooming") backToHub();
+      else if (v === "hub") backToHome();
+    });
   }, []);
 
   const signInWithPass = async (name, pass) => {
@@ -223,8 +226,8 @@ function App() {
 
       h("header", { className: "shrink-0 z-30 px-4 sm:px-7 py-3 flex items-center gap-2.5",
         style: { background: T.bar, backdropFilter: "blur(12px)", borderBottom: "1px solid " + T.hair } },
-        view === "timeline" ? h(Btn, { size: "sm", onClick: backToHub, title: "Back to the hub" }, h(ArrowLeft, { size: 13 })) : null,
-        view === "hub" ? h(Btn, { size: "sm", onClick: backToHome, title: "Back to the start" }, h(ArrowLeft, { size: 13 })) : null,
+        view === "timeline" ? h(Btn, { size: "sm", onClick: goBack, title: "Back to the hub" }, h(ArrowLeft, { size: 13 })) : null,
+        view === "hub" ? h(Btn, { size: "sm", onClick: goBack, title: "Back to the start" }, h(ArrowLeft, { size: 13 })) : null,
         h("div", { className: "flex-1 min-w-0" },
           h("div", { className: "truncate", style: { fontFamily: DISPLAY, fontSize: 18, letterSpacing: "0.03em" } },
             view === "timeline" && server ? server.name : "Events Timeline"),
@@ -246,7 +249,7 @@ function App() {
       h("main", { className: "flex-1 min-h-0 relative" },
         view === "home" ? h("div", { className: "absolute inset-0 fadein" },
           h(Home, { servers, events: allEvents, now, registered: auth.registered, myName: me.name,
-            onEnter: () => setView("hub") })) : null,
+            onEnter: openHub })) : null,
 
         view === "hub" || view === "zooming" ? h("div", { className: "absolute inset-0",
           style: { transform: view === "zooming" ? "scale(7)" : "scale(1)", opacity: view === "zooming" ? 0 : 1,

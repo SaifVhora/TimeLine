@@ -38,6 +38,8 @@ function wrap(g, text, maxW, maxLines) {
 
 export async function exportMonthPNG(opts) {
   const { serverName, monthStart, monthEnd, events, T, now } = opts;
+  const showPast = opts.showPast !== false;
+  const caption = (opts.caption || "").trim();
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
 
   const SERIF = "Marcellus, Georgia, 'Times New Roman', serif";
@@ -45,6 +47,7 @@ export async function exportMonthPNG(opts) {
 
   const items = events
     .filter((e) => evEnd(e) > monthStart && evStart(e) < monthEnd)
+    .filter((e) => showPast || statusOf(e, now) !== "past")
     .sort((a, b) => evStart(a) - evStart(b));
 
   const days = Math.max(1, Math.round((monthEnd - monthStart) / DAY));
@@ -116,7 +119,12 @@ export async function exportMonthPNG(opts) {
   g.fillStyle = T.text; g.font = "62px " + SERIF;
   g.fillText(monthName, 62, 52);
   g.fillStyle = T.muted; g.font = "16px " + MONOF;
-  g.fillText((serverName || "EVENTS").toUpperCase() + "  \u00B7  " + items.length + " EVENT" + (items.length === 1 ? "" : "S"), 64, 128);
+  g.fillText((serverName || "EVENTS").toUpperCase() + "  \u00B7  " + items.length + " EVENT" + (items.length === 1 ? "" : "S")
+    + (showPast ? "" : "  \u00B7  UPCOMING ONLY"), 64, 128);
+  if (caption) {
+    g.fillStyle = T.body; g.font = "19px " + SERIF;
+    g.fillText(caption, 64, 150);
+  }
 
   /* day ticks */
   for (let i = 0; i <= days; i++) {
