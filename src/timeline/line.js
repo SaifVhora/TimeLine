@@ -43,15 +43,41 @@ export function Line(p) {
 
   const wheelAt = useRef(0);
   const swipe = useRef(null);
-  const onMonthWheel = (e) => {
-    if (!focus) return;
-    const t = Date.now();
-    if (t - wheelAt.current < 420) return;
-    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (Math.abs(d) < 12) return;
-    wheelAt.current = t;
-    stepMonth(d > 0 ? 1 : -1);
-  };
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
+
+  /* React's onWheel is passive, so it cannot stop the browser turning a
+     sideways scroll into a back/forward navigation. This one is not. */
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const onWheelNative = (e) => {
+      const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (focusRef.current) {
+        /* zoomed into a month: any scroll steps months, and never navigates */
+        if (e.cancelable) e.preventDefault();
+        const t = Date.now();
+        if (t - wheelAt.current < 380) return;
+        const d = sideways ? e.deltaX : e.deltaY;
+        if (Math.abs(d) < 10) return;
+        wheelAt.current = t;
+        stepMonth(d > 0 ? 1 : -1);
+        return;
+      }
+      /* full line: sideways scroll pans the line, and we keep it to ourselves */
+      const sc = scroller.current;
+      if (!sc) return;
+      if (sideways) {
+        if (e.cancelable) e.preventDefault();
+        sc.scrollLeft += e.deltaX;
+      } else {
+        if (e.cancelable) e.preventDefault();
+        sc.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelNative);
+  }, [stepMonth]);
   const onMonthTouchStart = (e) => {
     if (!focus) { swipe.current = null; return; }
     const t = e.touches[0];
@@ -210,12 +236,8 @@ export function Line(p) {
         key: focus ? "focus" + focus.start : "full",
         ref: scroller, className: "scroller h-full overflow-y-hidden",
         style: { cursor: focus ? "default" : "grab", touchAction: "pan-x", overflowX: focus ? "hidden" : "auto",
+          overscrollBehaviorX: "contain",
           animation: focus ? "zoomStage .38s cubic-bezier(.2,.8,.25,1) both" : "zoomOutStage .32s ease both" },
-        onWheel: (e) => {
-          if (focus) { onMonthWheel(e); return; }
-          const el = scroller.current;
-          if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY;
-        },
         onTouchStart: onMonthTouchStart,
         onTouchEnd: onMonthTouchEnd,
         onScroll,

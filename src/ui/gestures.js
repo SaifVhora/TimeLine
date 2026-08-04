@@ -10,7 +10,12 @@
 let suppress = 0;          /* entries we're removing ourselves, not user navigation */
 const consumed = new Set(); /* handlers whose level a real back already used up */
 
-function pushLevel() { try { history.pushState({ et: Date.now() }, ""); } catch (e) {} }
+let seq = 0;
+let lastId;          /* the entry the last real back landed on */
+function pushLevel() {
+  lastId = undefined;   /* going deeper means the next back is always genuine */
+  try { history.pushState({ et: ++seq }, ""); } catch (e) {}
+}
 
 export const BackStack = {
   h: [],
@@ -54,10 +59,18 @@ export function installGestures(onViewBack) {
   if (window.__etGestures) return;
   window.__etGestures = true;
 
-  try { history.replaceState({ et: "root" }, ""); } catch (e) {}
+  try { history.replaceState({ et: 0 }, ""); } catch (e) {}
 
   window.addEventListener("popstate", () => {
     if (suppress > 0) { suppress--; return; }   /* our own tidy-up, ignore */
+    /* Some browsers deliver popstate twice for a single swipe, which walked an
+       extra level and dumped you on the home screen a moment later. Each entry
+       carries an id, so a repeat of the same one is ignored — while two real
+       back presses land on different entries and both count. */
+    const st = history.state;
+    const id = st && st.et !== undefined ? st.et : "root";
+    if (id === lastId) return;
+    lastId = id;
     const handled = BackStack.pop();            /* close a sheet or a zoomed month */
     if (!handled) onViewBack();                 /* otherwise move back a screen */
   });

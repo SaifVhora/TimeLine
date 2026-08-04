@@ -1,6 +1,6 @@
 /* works out what actually needs a human's attention */
 import { DAY } from "./time.js";
-import { evStart, evEnd, evHosts, statusOf } from "./events.js";
+import { evStart, evEnd, evHosts, statusOf, hasResult } from "./events.js";
 
 export function buildTodo(events, now) {
   const live = [], today = [], soon = [], missingResults = [], missingHost = [];
@@ -13,9 +13,8 @@ export function buildTodo(events, now) {
     else if (st !== "past" && evStart(ev) - now <= 7 * DAY) soon.push(ev);
 
     if (st === "past") {
-      const hasResult = (ev.winners || []).some((w) => w.name) || (ev.attachments || []).some((f) => f.url);
       /* only nag about the last 60 days — older than that, it's history */
-      if (!hasResult && now - evEnd(ev) < 60 * DAY) missingResults.push(ev);
+      if (!hasResult(ev) && now - evEnd(ev) < 60 * DAY) missingResults.push(ev);
     } else if (!evHosts(ev).length) {
       missingHost.push(ev);
     }

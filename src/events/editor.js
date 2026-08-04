@@ -13,7 +13,7 @@ export const blankEvent = () => ({
   id: uid(), title: "", type: "vc", label: "", color: null, allDay: false, side: "auto",
   start: new Date(Date.now() + HOUR).toISOString(), durationMin: 90,
   hosts: [], where: { kind: "voice", channel: "" },
-  winners: [{ place: 1, name: "", prize: "", score: "" }], attachments: [], participants: [], notes: "",
+  winners: [{ place: 1, name: "", prize: "", score: "" }], resultText: "", attachments: [], participants: [], notes: "",
 });
 
 const TABS = [
@@ -35,7 +35,10 @@ export function Editor(p) {
       const end = new Date(new Date(p.ev.start).getTime() + (p.ev.durationMin || 90) * MIN).toISOString();
       setD({ where: { kind: "voice", channel: "" }, ...p.ev, type: resolveType(p.ev).id,
         label: p.ev.label || "", color: p.ev.color || null, allDay: !!p.ev.allDay,
-        side: p.ev.side || "auto", hosts: evHosts(p.ev), end });
+        side: p.ev.side || "auto", hosts: evHosts(p.ev),
+        resultText: p.ev.resultText || "",
+        resultMode: (p.ev.resultText || "").trim() ? "text" : "places",
+        end });
     } else setD(null);
     setTab("when");
     setPeopleText(((p.ev && p.ev.participants) || []).join(", "));
@@ -99,7 +102,8 @@ export function Editor(p) {
       where: d.where && d.where.channel && d.where.channel.trim()
         ? { kind: kindFromType[d.type] || "other", channel: d.where.channel.trim() } : null,
       participants: peopleText.split(/[,\n]/).map((s) => s.trim()).filter(Boolean),
-      winners: (d.winners || []).filter((w) => (w.name || "").trim()),
+      resultText: d.resultMode === "text" ? (d.resultText || "").trim() : "",
+      winners: d.resultMode === "text" ? [] : (d.winners || []).filter((w) => (w.name || "").trim()),
       attachments: (d.attachments || []).filter((f) => (f.url || "").trim()),
     });
   };
@@ -191,7 +195,23 @@ export function Editor(p) {
             onChange: (e) => set("notes", e.target.value), placeholder: "Format, rules, anything the team should know" }))) : null,
 
       tab === "results" ? h("div", { className: "space-y-5" },
-        h("div", null, h(Label, null, "Placements"),
+
+        h("div", null,
+          h(Label, null, "How results are recorded"),
+          h("div", { className: "flex gap-1.5 flex-wrap" },
+            h(Chip, { on: (d.resultMode || "places") === "places", onClick: () => set("resultMode", "places") }, "PLACEMENTS"),
+            h(Chip, { on: d.resultMode === "text", onClick: () => set("resultMode", "text") }, "JUST WRITE IT")),
+          h("div", { className: "mt-1.5 text-xs", style: { color: T.muted } },
+            d.resultMode === "text"
+              ? "Free text \u2014 write it however you like."
+              : "Ranked list with scores and prizes.")),
+
+        d.resultMode === "text"
+          ? h(Field, { label: "Result", hint: "Shown on the event and copied into the Discord post" },
+              h("textarea", { rows: 4, style: { ...input, resize: "vertical" }, value: d.resultText || "",
+                onChange: (e) => set("resultText", e.target.value),
+                placeholder: "e.g. Ann took it with 42 points, Bo close behind" }))
+          : h("div", null, h(Label, null, "Placements"),
           h("div", { className: "space-y-2" }, (d.winners || []).map((w, i) =>
             h("div", { key: i, className: "flex gap-2 items-center" },
               h("span", { className: "w-8 shrink-0 text-center py-2 rounded-lg",
@@ -206,6 +226,7 @@ export function Editor(p) {
             style: { color: T.gold, background: "none", border: "none", cursor: "pointer" },
             onClick: () => setD((x) => ({ ...x, winners: [...(x.winners || []), { place: (x.winners || []).length + 1, name: "", prize: "", score: "" }] })) },
             h(Plus, { size: 12 }), " Add a place")),
+
         h("div", null, h(Label, null, "Attached results"),
           h("div", { className: "text-xs mb-2", style: { color: T.muted } }, "Link a results graphic, a message, or a full scoreboard."),
           h("div", { className: "space-y-2" }, (d.attachments || []).map((f, i) =>

@@ -28,6 +28,11 @@ export const BODY = "'Instrument Sans', ui-sans-serif, system-ui";
 export const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
 export const globalCSS = (T) => `
+  /* Keep sideways overscroll inside the app. Without this the browser reads a
+     horizontal scroll that runs past the end as a back gesture and leaves the
+     site — which is why scrolling around felt like it triggered "back". */
+  html, body { overscroll-behavior-x: none; overscroll-behavior-y: auto; }
+  .scroller, [class*="overflow-x"], [class*="overflow-y"] { overscroll-behavior-x: none; }
   input::placeholder, textarea::placeholder { color: ${T.muted}; }
   input:focus, textarea:focus, select:focus { border-color: ${T.current} !important; }
   button:focus-visible, input:focus-visible { outline: 1px solid ${T.gold}; outline-offset: 2px; }

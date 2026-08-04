@@ -89,6 +89,7 @@ export function ServerView(p) {
       page === "standings" && isStaff ? h(StandingsPage, shared) : null),
 
     h(Detail, { ev: detail, now: p.now, names, onClose: () => setDetail(null),
+      serverName: p.server.name, onPing: p.ping,
       perms: { edit: canEditEvent(p.auth, detail, p.me), delete: p.auth.delete },
       onEdit: (e) => { setDetail(null); setEditing(e); }, onDelete: setConfirmDel, onCopy: (t) => copy(t, p.ping) }),
 

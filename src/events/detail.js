@@ -1,23 +1,27 @@
-import { h } from "../react.js";
+import { h, useState, useEffect } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
-import { useT, Btn, Label } from "../ui/atoms.js";
+import { useT, useInput, Btn, Label, Toggle, Chip } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { X, Copy, Pencil, Trash, Link2, BadgeCheck, placeOf } from "../icons.js";
+import { X, Copy, Pencil, Trash, Link2, BadgeCheck, Download, Trophy, placeOf } from "../icons.js";
+import { PALETTE } from "../config.js";
+import { exportWinnerPNG } from "../timeline/winner-png.js";
 import { fmtFull, fmtTime, fmtDay, fmtDur, countdown, MIN } from "../lib/time.js";
-import { resolveType, evShort, evColor, evHosts, evEnd, isMultiDay, statusOf } from "../lib/events.js";
+import { resolveType, evShort, evColor, evHosts, evEnd, isMultiDay, statusOf, evWinners, evResultText } from "../lib/events.js";
 import { announcement } from "./announce.js";
 
 const Block = (p) => h("div", { className: "pt-4" }, h(Label, null, p.label), h("div", { className: "text-sm" }, p.children));
 
 export function Detail(p) {
   const T = useT();
+  const [gfx, setGfx] = useState(false);
   const ev = p.ev;
   if (!ev) return null;
   const t = resolveType(ev);
   const st = statusOf(ev, p.now);
   const pl = ev.where && ev.where.channel ? placeOf(ev.where.kind) : null;
   const PlIcon = pl ? pl.icon : null;
-  const winners = (ev.winners || []).filter((w) => w.name);
+  const winners = evWinners(ev);
+  const resultText = evResultText(ev);
   const people = ev.participants || [];
   const files = (ev.attachments || []).filter((f) => f.url);
   const hosts = evHosts(ev);
@@ -52,6 +56,9 @@ export function Detail(p) {
             (p.names || []).includes(hst.replace(/^@/, "")) ? h(BadgeCheck, { size: 11, style: { color: T.gold } }) : null,
             hst)))) : null,
 
+      resultText ? h(Block, { label: "Result" },
+        h("span", { style: { color: T.body, whiteSpace: "pre-wrap" } }, resultText)) : null,
+
       winners.length ? h(Block, { label: "Results" },
         h("div", { className: "space-y-1.5" }, winners.map((w, i) =>
           h("div", { key: i, className: "flex items-baseline gap-2.5" },
@@ -74,9 +81,71 @@ export function Detail(p) {
 
       h("div", { className: "flex gap-2 pt-5 flex-wrap" },
         h(Btn, { size: "sm", onClick: () => p.onCopy(announcement(ev)) }, h(Copy, { size: 12 }), " Copy for Discord"),
+        (winners.length || resultText) ? h(Btn, { size: "sm", tone: "gold", onClick: () => setGfx(true) },
+          h(Trophy, { size: 12 }), " Winner graphic") : null,
         p.perms.edit ? h(Btn, { size: "sm", onClick: () => p.onEdit(ev) }, h(Pencil, { size: 12 }), " Edit") : null,
         p.perms.delete ? h(Btn, { size: "sm", tone: "danger", onClick: () => p.onDelete(ev) }, h(Trash, { size: 12 })) : null),
 
       ev.updatedBy ? h("div", { className: "pt-3", style: { fontFamily: MONO, fontSize: 9, color: T.muted } },
-        "LAST EDIT \u00B7 " + String(ev.updatedBy).toUpperCase()) : null));
+        "LAST EDIT \u00B7 " + String(ev.updatedBy).toUpperCase()) : null,
+
+      h(WinnerGfx, { open: gfx, onClose: () => setGfx(false), ev, serverName: p.serverName, ping: p.onPing })));
+}
+
+/* the winner graphic maker */
+export function WinnerGfx(p) {
+  const T = useT();
+  const input = useInput();
+  const [o, setO] = useState({ heading: "WINNERS", note: "", color: null, showHosts: true, showDate: true });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (p.open) setO((x) => ({ ...x, color: null })); }, [p.open]);
+  if (!p.open || !p.ev) return null;
+
+  const go = async () => {
+    setBusy(true);
+    try {
+      const ok = await exportWinnerPNG({ ev: p.ev, T, serverName: p.serverName,
+        heading: o.heading, note: o.note, color: o.color, showHosts: o.showHosts, showDate: o.showDate });
+      p.ping && p.ping(ok ? "Graphic saved to your downloads" : "The browser blocked the download", !ok);
+      if (ok) p.onClose();
+    } catch (e) {
+      p.ping && p.ping("Couldn't make the graphic: " + (e && e.message ? e.message : "unknown"), true);
+    }
+    setBusy(false);
+  };
+
+  const HEADINGS = ["WINNERS", "RESULTS", "CHAMPION", "TOP PLAYERS", "FINAL STANDINGS"];
+
+  return h(Modal, { open: p.open, onClose: p.onClose },
+    h("div", { className: "p-6" },
+      h("div", { style: { fontFamily: DISPLAY, fontSize: 20 } }, "Winner graphic"),
+      h("p", { className: "mt-1.5 mb-4 text-sm", style: { color: T.body } },
+        "A card with the results, ready to post in Discord."),
+
+      h("div", null, h(Label, null, "Heading"),
+        h("div", { className: "flex gap-1.5 flex-wrap mb-2" },
+          HEADINGS.map((x) => h(Chip, { key: x, on: o.heading === x, onClick: () => setO({ ...o, heading: x }) }, x))),
+        h("input", { style: input, value: o.heading, maxLength: 22,
+          onChange: (e) => setO({ ...o, heading: e.target.value }), placeholder: "Or write your own" })),
+
+      h("div", { className: "mt-4" }, h(Label, null, "Accent colour"),
+        h("div", { className: "flex gap-1.5 flex-wrap items-center" },
+          h(Chip, { on: !o.color, onClick: () => setO({ ...o, color: null }) }, "EVENT COLOUR"),
+          PALETTE.map((c) => h("button", { key: c, onClick: () => setO({ ...o, color: c }),
+            style: { width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+              border: o.color === c ? "2px solid " + T.text : "2px solid transparent" } })))),
+
+      h("div", { className: "mt-4" }, h(Label, null, "Note under the results"),
+        h("input", { style: input, value: o.note, maxLength: 70,
+          onChange: (e) => setO({ ...o, note: e.target.value }),
+          placeholder: "e.g. Thanks to everyone who turned up" })),
+
+      h("div", { className: "mt-4 space-y-3" },
+        h(Toggle, { on: o.showDate, label: "Show the date", onChange: (v) => setO({ ...o, showDate: v }) }),
+        h(Toggle, { on: o.showHosts, label: "Show who hosted", onChange: (v) => setO({ ...o, showHosts: v }) })),
+
+      h("div", { className: "mt-5 flex gap-2" },
+        h(Btn, { tone: "solid", full: true, disabled: busy, onClick: go },
+          h(Download, { size: 13 }), busy ? " Making it\u2026" : " Save the graphic"),
+        h(Btn, { onClick: p.onClose }, "Cancel"))));
 }

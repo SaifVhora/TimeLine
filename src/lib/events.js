@@ -32,4 +32,10 @@ export function statusOf(ev, now) {
   return s - now <= 24 * 3600000 ? "soon" : "upcoming";
 }
 
+/* results can be structured placements or just a line of text */
+export const evWinners = (ev) => (ev.winners || []).filter((w) => w && w.name);
+export const evResultText = (ev) => (ev.resultText || "").trim();
+export const hasResult = (ev) => evWinners(ev).length > 0 || !!evResultText(ev)
+  || (ev.attachments || []).some((f) => f.url);
+
 export const kindFromType = { vc: "voice", channel: "text", server: "other", other: "other" };
