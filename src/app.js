@@ -16,7 +16,7 @@ import { hashPass, newKey, uid, appLink } from "./lib/util.js";
 import { nowISO, ago } from "./lib/time.js";
 import { Setup } from "./views/setup.js";
 
-export const BUILD = 26;
+export const BUILD = 27;
 
 
 

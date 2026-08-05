@@ -172,3 +172,13 @@ ones get a glowing border and a progress shimmer), the NOW beacon pulses an
 expanding ring, the home title gets the aurora gradient, and the sync dot
 glows "LIVE · SYNCED". Classic dark and light are untouched — cycle themes
 with the header button. (sw bumped to v25.)
+
+## Round 4 — cursor displacement fix (v27)
+Text size uses CSS zoom, and browsers disagree on whether
+`getBoundingClientRect()` is reported in zoomed or unzoomed pixels. The
+timeline's crosshair mixed the two, so at Large/XL text the marker sat up to
+~84px away from the actual cursor (and drag-panning ran at the wrong speed).
+`src/timeline/line.js` now measures the real scale from painted width vs
+layout width and converts pointer coords into the scroller's own space — self-
+correcting on every browser, at any text size or browser zoom. The hub's
+zoom-in origin is now measured from the pressed card for the same reason.

@@ -188,17 +188,30 @@ export function Line(p) {
   }, [tOf]);
   useEffect(() => { onScroll(); }, [onScroll, Z, focus]);
 
+  /* Pointer coords arrive in visual pixels; everything we draw is positioned in
+     the scroller's own layout pixels. Text size uses CSS zoom, and browsers
+     disagree on whether getBoundingClientRect is zoomed — which is what made
+     the crosshair sit away from the cursor. Measuring the ratio between the
+     painted width and the layout width gives the true scale on every browser,
+     so this stays correct at any text size or page zoom. */
+  const scaleOf = (el, rect) => {
+    const r = rect.width && el.clientWidth ? rect.width / el.clientWidth : 1;
+    return r > 0.2 && r < 5 ? r : 1;
+  };
+
   const onMove = (e) => {
     const el = scroller.current; if (!el) return;
     if (e.pointerType !== "mouse") return;
+    const rect = el.getBoundingClientRect();
+    const k = scaleOf(el, rect);
     if (drag.current.on) {
-      const dx = e.clientX - drag.current.x;
+      const dx = (e.clientX - drag.current.x) / k;
       drag.current.moved = Math.max(drag.current.moved, Math.abs(dx));
       el.scrollLeft = drag.current.left - dx;
     }
-    const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left + el.scrollLeft;
-    setHover(Math.abs(e.clientY - rect.top - lineY) < ARM + 30 ? { x, t: tOf(x) } : null);
+    const x = (e.clientX - rect.left) / k + el.scrollLeft;
+    const y = (e.clientY - rect.top) / k;
+    setHover(Math.abs(y - lineY) < ARM + 30 ? { x, t: tOf(x) } : null);
   };
 
   const exportTitle = () => {

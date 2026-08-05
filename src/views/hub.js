@@ -36,7 +36,16 @@ export function Hub(p) {
           const count = p.events.filter((e) => e.serverId === s.id).length;
           const lv = liveOf(s.id);
           return h("button", { key: s.id, className: "lift text-left relative",
-            onClick: (e) => p.onEnter(s, Math.round(e.clientX / window.innerWidth * 100) + "% " + Math.round(e.clientY / window.innerHeight * 100) + "%"),
+            onClick: (e) => {
+              /* zoom out of the card the person actually pressed, measured from
+                 the card itself so text size / page zoom can't shift the origin */
+              const r = e.currentTarget.getBoundingClientRect();
+              const host = e.currentTarget.offsetParent || document.body;
+              const hr = host.getBoundingClientRect();
+              const px = hr.width ? ((r.left + r.width / 2) - hr.left) / hr.width * 100 : 50;
+              const py = hr.height ? ((r.top + r.height / 2) - hr.top) / hr.height * 100 : 50;
+              p.onEnter(s, Math.round(px) + "% " + Math.round(py) + "%");
+            },
             style: { border: "1px solid " + T.hair, borderRadius: 16, padding: "18px",
               background: "linear-gradient(160deg, rgba(139,123,255,0.08), rgba(6,9,18,0.4))",
               cursor: "pointer", overflow: "hidden", color: T.text } },
