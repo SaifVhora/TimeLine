@@ -29,55 +29,12 @@ export function Line(p) {
 
   const unfocus = () => { centered.current = false; setFocus(null); };
 
-  /* while zoomed into a month, step to the next or previous one */
-  const stepMonth = useCallback((n) => {
-    setFocus((f) => {
-      if (!f) return f;
-      const d = new Date(f.start);
-      const s2 = new Date(d.getFullYear(), d.getMonth() + n, 1);
-      const e2 = new Date(d.getFullYear(), d.getMonth() + n + 1, 1);
-      return { start: s2.getTime(), end: e2.getTime(),
-        label: s2.toLocaleDateString(undefined, { month: "long" }), year: s2.getFullYear() };
-    });
-  }, []);
-
+  const EDGE = 0.10;                 /* outer tenth of the width, each side */
   const wheelAt = useRef(0);
   const swipe = useRef(null);
   const focusRef = useRef(focus);
   focusRef.current = focus;
 
-  /* React's onWheel is passive, so it cannot stop the browser turning a
-     sideways scroll into a back/forward navigation. This one is not. */
-  useEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const onWheelNative = (e) => {
-      const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      if (focusRef.current) {
-        /* zoomed into a month: any scroll steps months, and never navigates */
-        if (e.cancelable) e.preventDefault();
-        const t = Date.now();
-        if (t - wheelAt.current < 380) return;
-        const d = sideways ? e.deltaX : e.deltaY;
-        if (Math.abs(d) < 10) return;
-        wheelAt.current = t;
-        stepMonth(d > 0 ? 1 : -1);
-        return;
-      }
-      /* full line: sideways scroll pans the line, and we keep it to ourselves */
-      const sc = scroller.current;
-      if (!sc) return;
-      if (sideways) {
-        if (e.cancelable) e.preventDefault();
-        sc.scrollLeft += e.deltaX;
-      } else {
-        if (e.cancelable) e.preventDefault();
-        sc.scrollLeft += e.deltaY;
-      }
-    };
-    el.addEventListener("wheel", onWheelNative, { passive: false });
-    return () => el.removeEventListener("wheel", onWheelNative);
-  }, [stepMonth]);
   const onMonthTouchStart = (e) => {
     if (!focus) { swipe.current = null; return; }
     const t = e.touches[0];
@@ -122,6 +79,75 @@ export function Line(p) {
   const xOf = useCallback((t) => ((new Date(t).getTime() - range.start) / DAY) * Z + padX, [range, Z, padX]);
   const tOf = useCallback((x) => range.start + ((x - padX) / Z) * DAY, [range, Z, padX]);
   const width = focus ? size.w : Math.max(xOf(range.end) + padX, size.w + 100);
+
+  /* the month currently in the middle of the screen */
+  const centreMonth = useCallback(() => {
+    if (focus) return new Date(focus.start);
+    const el = scroller.current;
+    const d = new Date(tOf(el ? el.scrollLeft + el.clientWidth / 2 : 0));
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }, [focus, tOf]);
+
+  /* step a month — zoomed in it changes the month, on the full line it slides there */
+  const stepMonth = useCallback((n) => {
+    if (focus) {
+      setFocus((f) => {
+        if (!f) return f;
+        const d = new Date(f.start);
+        const s2 = new Date(d.getFullYear(), d.getMonth() + n, 1);
+        const e2 = new Date(d.getFullYear(), d.getMonth() + n + 1, 1);
+        return { start: s2.getTime(), end: e2.getTime(),
+          label: s2.toLocaleDateString(undefined, { month: "long" }), year: s2.getFullYear() };
+      });
+      return;
+    }
+    const el = scroller.current;
+    if (!el) return;
+    const c = centreMonth();
+    const target = new Date(c.getFullYear(), c.getMonth() + n, 15).getTime();
+    el.scrollTo({ left: xOf(target) - el.clientWidth / 2, behavior: "smooth" });
+  }, [focus, centreMonth, xOf]);
+
+  /* React's onWheel is passive, so it cannot stop the browser turning a
+     sideways scroll into a back/forward navigation. This one is not. */
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const onWheelNative = (e) => {
+      if (e.cancelable) e.preventDefault();   /* nothing here ever reaches the browser */
+
+      const box = el.getBoundingClientRect();
+      const rel = (e.clientX - box.left) / (box.width || 1);
+      const zone = rel <= EDGE ? -1 : rel >= 1 - EDGE ? 1 : 0;
+      const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      const d = sideways ? e.deltaX : e.deltaY;
+
+      /* the outer tenth on either side steps a month, whichever way you scroll */
+      if (zone !== 0) {
+        if (Math.abs(d) < 8) return;
+        const t = Date.now();
+        if (t - wheelAt.current < 420) return;
+        wheelAt.current = t;
+        stepMonth(zone);
+        return;
+      }
+
+      /* the middle pans the line; zoomed in there is nothing to pan */
+      if (focusRef.current) return;
+      const sc = scroller.current;
+      if (sc) sc.scrollLeft += d;
+    };
+    el.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelNative);
+  }, [stepMonth]);
+
+  /* names for the two edge strips */
+  const neighbourMonth = (n) => {
+    const c = centreMonth();
+    return new Date(c.getFullYear(), c.getMonth() + n, 1)
+      .toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase();
+  };
+
 
   const nodes = useMemo(() => {
     const sorted = [...p.events].sort((a, b) => evStart(a) - evStart(b));
@@ -231,7 +257,23 @@ export function Line(p) {
         style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: busy ? T.gold : T.muted, background: "none", border: "none", cursor: "pointer" } },
         h(Download, { size: 11 }), busy ? " RENDERING\u2026" : " EXPORT PNG")),
 
-    h("div", { ref: wrap, className: "flex-1 min-h-0" },
+    h("div", { ref: wrap, className: "flex-1 min-h-0 relative" },
+      /* edge strips: scroll or click either one to move a month */
+      h("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: 5 } },
+        [-1, 1].map((dir) => h("div", { key: dir,
+          className: "absolute top-0 bottom-0 flex items-center " + (dir < 0 ? "justify-start" : "justify-end"),
+          style: { [dir < 0 ? "left" : "right"]: 0, width: (EDGE * 100) + "%",
+            background: dir < 0
+              ? "linear-gradient(90deg, " + T.gold + "1c, transparent)"
+              : "linear-gradient(270deg, " + T.gold + "1c, transparent)" } },
+          h("button", { onClick: () => stepMonth(dir), "aria-label": dir < 0 ? "Previous month" : "Next month",
+            className: "pointer-events-auto flex flex-col items-center gap-1",
+            style: { background: "none", border: "none", cursor: "pointer", padding: "18px 10px", color: T.gold } },
+            h("span", { style: { fontFamily: DISPLAY, fontSize: 30, lineHeight: 1, opacity: 0.85 } },
+              dir < 0 ? "\u2039" : "\u203A"),
+            h("span", { style: { fontFamily: MONO, fontSize: 8, letterSpacing: "0.12em", opacity: 0.7,
+              writingMode: "vertical-rl", transform: dir < 0 ? "rotate(180deg)" : "none" } },
+              neighbourMonth(dir)))))),
       h("div", {
         key: focus ? "focus" + focus.start : "full",
         ref: scroller, className: "scroller h-full overflow-y-hidden",
