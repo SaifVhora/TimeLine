@@ -130,3 +130,37 @@ overlaps. Pin an event and it always renders on that side; `layoutCards` in
 nearest the line, and auto events fill in around them. Pinned events that clash
 stack outward on their own side rather than jumping across. The PNG export uses
 the same rule, so an exported month matches what you see.
+
+## Round 2 — the big overhaul (v24)
+
+**Speed**
+- Tailwind is now compiled into `src/tw.css` — the in-browser compiler is gone.
+  If you add a brand-new Tailwind class the file doesn't know, either add the
+  style inline or re-run: `npx tailwindcss -i tw-in.css -o src/tw.css --minify`
+  (plain CSS edits never need this).
+- `index.html` preloads every module in parallel — no more waterfall.
+- The starfield is one canvas instead of ~240 animated elements, pauses when
+  the tab is hidden, and respects reduced-motion.
+
+**Realtime (free)**
+- The app now listens to Firebase over a live stream (`openStream` in
+  `src/store/db.js`). Changes appear on everyone's screen the moment they're
+  saved. Polling remains only as a slow safety net.
+- Saves send ONLY the records that changed (`buildPatch` + `patchRemote`) —
+  never the whole database. Two people editing different events can't wipe
+  each other any more, and it uses far less of the free-plan bandwidth.
+
+**Themes**
+- Three now: classic dark → **Nova** (the new sky: aurora accents, comet on
+  the line) → light. The header button cycles through them.
+
+**Security**
+- Paste `firebase-rules.json` into Firebase console → Realtime Database →
+  Rules. It blocks writes outside the app's shape and stops the whole tree
+  being overwritten in one shot. For a full lock-down you'd add Firebase
+  Auth later — happy to wire that when you want it.
+
+**Housekeeping**
+- 31 dead imports removed across 15 files.
+- The hub → server zoom is a smoother, GPU-friendly scale instead of the old
+  scale(7) jump. Service worker bumped to v24 and now refreshes CSS too.

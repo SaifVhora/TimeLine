@@ -1,5 +1,5 @@
 /* Month → PNG. Rewritten: waits for fonts, draws at 2x, lays cards out properly. */
-import { DAY, MIN, fmtTime } from "../lib/time.js";
+import { DAY, fmtTime } from "../lib/time.js";
 import { evStart, evEnd, evShort, evColor, evRange, evHosts, statusOf } from "../lib/events.js";
 import { statusColors } from "./lanes.js";
 

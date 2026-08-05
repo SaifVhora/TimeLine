@@ -3,7 +3,7 @@
    The app's own code is fetched network-first: a deploy is picked up on the
    next load, never a stale mix of old and new modules. The cache is only a
    fallback for when there's no connection. */
-const CACHE = "events-timeline-v23";
+const CACHE = "events-timeline-v24";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["./", "./index.html"])).catch(() => {}));
@@ -26,7 +26,7 @@ self.addEventListener("fetch", (e) => {
   if (url.hostname.indexOf("firebaseio.com") >= 0 || url.hostname.indexOf("firebasedatabase.app") >= 0) return;
 
   const ours = url.origin === self.location.origin;
-  const isCode = ours && (req.mode === "navigate" || url.pathname.endsWith(".js") || url.pathname.endsWith(".html") || url.pathname === "/");
+  const isCode = ours && (req.mode === "navigate" || url.pathname.endsWith(".js") || url.pathname.endsWith(".css") || url.pathname.endsWith(".html") || url.pathname === "/");
 
   if (isCode) {
     /* always try the network first so code is never stale */

@@ -3,7 +3,7 @@ import { DISPLAY, BODY, MONO } from "../theme.js";
 import { useT, useInput, Btn, Label, Field, ThemeCtx } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
 import { Stars } from "../ui/stars.js";
-import { Eye, EyeOff, Sparkles, X, BadgeCheck } from "../icons.js";
+import { Eye, EyeOff, Sparkles, X } from "../icons.js";
 import { fingerprint } from "../lib/util.js";
 import { Avatar, avatarFor, AV_COLORS, AV_SYMBOLS } from "./avatar.js";
 

@@ -1,10 +1,10 @@
 import React, { h, useState, useEffect, useMemo, useCallback, useRef } from "./react.js";
 import { THEME, BODY, DISPLAY, MONO, globalCSS } from "./theme.js";
 import { ThemeCtx, useT, Btn } from "./ui/atoms.js";
-import { installGestures, enterLevel, goBack, BackStack } from "./ui/gestures.js";
-import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, Lock, TextSize } from "./icons.js";
+import { installGestures, enterLevel, goBack } from "./ui/gestures.js";
+import { Shield, Sun, Moon, RotateCw, ArrowLeft, LogOut, User, KeyRound, Sparkles, Hourglass, TextSize } from "./icons.js";
 import { PASS_SALT } from "./config.js";
-import { EMPTY, configured, normalize, mergeDB, readRemote, writeRemote, cache } from "./store/db.js";
+import { EMPTY, configured, normalize, mergeDB, readRemote, buildPatch, patchRemote, openStream, cache } from "./store/db.js";
 import { maybeSnapshot } from "./store/backup.js";
 import { computeAuth, canOpenAdmin } from "./auth/roles.js";
 import { Gate, NameForm, JoinModal, SigninModal, ProfileModal } from "./auth/people.js";
@@ -12,7 +12,7 @@ import { Admin } from "./auth/admin.js";
 import { Home } from "./views/home.js";
 import { Hub } from "./views/hub.js";
 import { ServerView } from "./views/server.js";
-import { hashPass, newKey, uid, fingerprint, appLink } from "./lib/util.js";
+import { hashPass, newKey, uid, appLink } from "./lib/util.js";
 import { nowISO, ago } from "./lib/time.js";
 import { Setup } from "./views/setup.js";
 
@@ -54,7 +54,7 @@ function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [showSignin, setShowSignin] = useState(false);
 
-  const T = THEME[mode];
+  const T = THEME[mode] || THEME.dark;
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
   const ping = (msg, bad) => { setToast({ msg, bad }); setTimeout(() => setToast(null), 3200); };
@@ -65,7 +65,9 @@ function App() {
       const remote = await readRemote();
       const merged = mergeDB(local.current, remote);
       local.current = merged; setDb(merged); cache.saveDb(merged);
-      if (dirty.current || JSON.stringify(remote) !== JSON.stringify(merged)) await writeRemote(merged);
+      /* only the records that differ leave the device — never the whole DB */
+      const patch = buildPatch(remote, merged);
+      if (Object.keys(patch).length) await patchRemote(patch);
       dirty.current = false; setConn("synced"); setLastSync(Date.now());
       try { maybeSnapshot(merged); } catch (e) {}
       if (announce) ping("Everything is up to date");
@@ -76,6 +78,22 @@ function App() {
       return false;
     }
   }, []);
+
+  /* realtime: the server pushes every change the moment it lands */
+  useEffect(() => {
+    if (!booted) return;
+    const stream = openStream(
+      (remote) => {
+        const merged = mergeDB(local.current, remote);
+        if (JSON.stringify(merged) !== JSON.stringify(local.current)) {
+          local.current = merged; setDb(merged); cache.saveDb(merged);
+        }
+        setConn("synced"); setLastSync(Date.now());
+      },
+      (state) => { if (state === "down") sync(false); }
+    );
+    return () => stream && stream.close();
+  }, [booted, sync]);
 
   useEffect(() => {
     let mine = cache.me();
@@ -88,9 +106,10 @@ function App() {
 
   const auth = useMemo(() => computeAuth(db, me), [db, me]);
 
+  /* the stream does the heavy lifting; this is just a safety-net reconcile */
   useEffect(() => {
     if (!booted) return;
-    const gap = conn === "offline" ? 10000 : auth.state === "waiting" ? 6000 : 12000;
+    const gap = conn === "offline" ? 10000 : auth.state === "waiting" ? 15000 : 60000;
     const t = setInterval(() => sync(false), gap);
     return () => clearInterval(t);
   }, [booted, conn, auth.state, sync]);
@@ -117,7 +136,7 @@ function App() {
   const enterServer = (s, pos) => {
     enterLevel();
     setOrigin(pos); setServerId(s.id); setView("zooming");
-    setTimeout(() => setView("timeline"), 620);
+    setTimeout(() => setView("timeline"), 500);
   };
   const backToHub = () => { setView("leaving"); setTimeout(() => { setView("hub"); setServerId(null); }, 380); };
   const backToHome = () => setView("home");
@@ -176,7 +195,13 @@ function App() {
   };
 
   const savePref = (patch) => cache.savePref({ mode, textSize, ...patch });
-  const flip = () => { const next = mode === "dark" ? "light" : "dark"; setMode(next); savePref({ mode: next }); };
+  /* three looks now: classic dark → nova (the v2 sky) → light */
+  const flip = () => {
+    const order = ["dark", "nova", "light"];
+    const next = order[(order.indexOf(mode) + 1) % order.length];
+    setMode(next); savePref({ mode: next });
+    ping(next === "nova" ? "Nova theme \u2014 the new sky" : next === "dark" ? "Classic dark" : "Light theme");
+  };
 
   /* three text sizes — scales the whole interface, not just body copy */
   const STEPS = [1, 1.12, 1.28];
@@ -238,7 +263,7 @@ function App() {
           h(TextSize, { size: 13 }),
           textSize !== 1 ? h("span", { style: { fontFamily: MONO, fontSize: 8, marginLeft: 2 } },
             textSize === 1.12 ? "L" : "XL") : null),
-        h(Btn, { size: "sm", onClick: flip, title: "Switch theme" }, mode === "dark" ? h(Sun, { size: 13 }) : h(Moon, { size: 13 })),
+        h(Btn, { size: "sm", onClick: flip, title: "Switch theme" }, mode === "dark" ? h(Sparkles, { size: 13 }) : mode === "nova" ? h(Sun, { size: 13 }) : h(Moon, { size: 13 })),
         h(Btn, { size: "sm", onClick: () => sync(true), title: "Sync" }, h(RotateCw, { size: 13, className: conn === "syncing" ? "spin" : "" })),
         canOpenAdmin(auth) ? h("div", { className: "relative" },
           h(Btn, { size: "sm", onClick: () => setShowAdmin(true), title: "Admin" }, h(Shield, { size: 13 })),
@@ -252,8 +277,8 @@ function App() {
             onEnter: openHub })) : null,
 
         view === "hub" || view === "zooming" ? h("div", { className: "absolute inset-0",
-          style: { transform: view === "zooming" ? "scale(7)" : "scale(1)", opacity: view === "zooming" ? 0 : 1,
-            transformOrigin: origin, transition: "transform .62s cubic-bezier(.55,0,.35,1), opacity .62s ease" } },
+          style: { transform: view === "zooming" ? "scale(2.1)" : "scale(1)", opacity: view === "zooming" ? 0 : 1,
+            transformOrigin: origin, transition: "transform .5s cubic-bezier(.3,.7,.3,1), opacity .5s ease", willChange: "transform, opacity" } },
           h(Hub, { servers, events: allEvents, onEnter: enterServer, canManage: auth.servers,
             onCreate: (name) => apply((d) => { const id = uid();
               d.servers[id] = { id, name, createdAt: nowISO(), updatedAt: nowISO() }; return d; }, "Server added to the constellation"),

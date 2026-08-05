@@ -1,6 +1,6 @@
 import { h, useState, useMemo, useEffect, useRef, useCallback } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
-import { useT, useInput, Btn, Label, Toggle } from "../ui/atoms.js";
+import { useT } from "../ui/atoms.js";
 import { ExportDialog } from "../ui/export-dialog.js";
 import { ChevronLeft, ChevronRight, Plus, Trophy, Download, Crosshair } from "../icons.js";
 import { exportCalendarPNG } from "../timeline/calendar-png.js";

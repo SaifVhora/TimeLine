@@ -1,7 +1,7 @@
 import { h, useState, useMemo } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
-import { useT, Chip, Label } from "../ui/atoms.js";
-import { Trophy, Users, BadgeCheck } from "../icons.js";
+import { useT, Chip } from "../ui/atoms.js";
+import { Trophy, BadgeCheck } from "../icons.js";
 import { DAY } from "../lib/time.js";
 import { Avatar } from "../auth/avatar.js";
 import { buildStandings } from "../lib/standings.js";

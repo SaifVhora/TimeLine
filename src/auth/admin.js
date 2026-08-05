@@ -2,7 +2,7 @@ import { h, useState, useEffect } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, useInput, Btn, Label, Field } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { X, Check, Trash, Lock, Smartphone, ChevronDown, Share2, Copy, Link2, AlertCircle, KeyRound } from "../icons.js";
+import { X, Check, Trash, Smartphone, ChevronDown, Share2, Copy, Link2, AlertCircle, KeyRound } from "../icons.js";
 import { PERMS, NO_PERMS } from "../config.js";
 import { allRoles, roleById, permsFor } from "./roles.js";
 import { RolesTab } from "./roles-tab.js";

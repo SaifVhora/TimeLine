@@ -1,6 +1,6 @@
 /* Winner announcement graphic — a square-ish card built for posting in Discord. */
-import { fmtDay, fmtTime, MIN } from "../lib/time.js";
-import { evColor, evShort, evLabel, evHosts, evWinners, evResultText } from "../lib/events.js";
+import { fmtDay, fmtTime } from "../lib/time.js";
+import { evColor, evShort, evHosts, evWinners, evResultText } from "../lib/events.js";
 
 function roundRect(g, x, y, w, hgt, r) {
   const rr = Math.min(r, Math.abs(w) / 2, Math.abs(hgt) / 2);

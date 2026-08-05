@@ -1,4 +1,4 @@
-import { BUILTIN_ROLES, OWNER_PERMS, NO_PERMS, PERM_IDS } from "../config.js";
+import { BUILTIN_ROLES, OWNER_PERMS, NO_PERMS } from "../config.js";
 
 /* every role available: the three built-ins plus whatever this team has made */
 export function allRoles(access) {

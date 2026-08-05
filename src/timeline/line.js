@@ -5,9 +5,9 @@ import { Stars } from "../ui/stars.js";
 import { BackStack, goBack } from "../ui/gestures.js";
 import { Crosshair, ArrowLeft, ChevronLeft, ChevronRight, Plus, Download } from "../icons.js";
 import { PAD_X } from "../config.js";
-import { DAY, MIN, startOfDay, fmtDay } from "../lib/time.js";
+import { DAY, startOfDay, fmtDay } from "../lib/time.js";
 import { evStart, evEnd, evColor, statusOf } from "../lib/events.js";
-import { layoutCards, layoutBands, statusColors } from "./lanes.js";
+import { layoutCards, layoutBands } from "./lanes.js";
 import { TimelineNode } from "./node.js";
 import { exportMonthPNG } from "./export.js";
 import { ExportDialog } from "../ui/export-dialog.js";
@@ -323,7 +323,7 @@ export function Line(p) {
                 background: c, opacity: 0.85, pointerEvents: "none" } }));
           }),
 
-          h("div", { className: "draw absolute", style: { left: 0, right: 0, top: lineY - 1, height: 2, borderRadius: 2, background: T.current + "33" } }),
+          h("div", { className: "draw absolute" + (T.comet ? " comet" : ""), style: { left: 0, right: 0, top: lineY - 1, height: 2, borderRadius: 2, background: T.comet ? "linear-gradient(90deg, transparent, " + T.hair + " 8%, " + T.hair + " 92%, transparent)" : T.current + "33" } }),
           h("div", { className: "draw flame absolute", style: { left: 0, right: 0, top: lineY - 1.5,
             height: T.isDark ? 3 : 4, borderRadius: 3,
             boxShadow: T.isDark

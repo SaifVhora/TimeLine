@@ -1,10 +1,10 @@
 import { h, useState, useMemo } from "../react.js";
 import { DISPLAY, BODY, MONO } from "../theme.js";
-import { useT, Btn, Chip } from "../ui/atoms.js";
+import { useT, Chip } from "../ui/atoms.js";
 import { Search, Trophy, Paperclip, Users } from "../icons.js";
 import { TYPES } from "../config.js";
-import { fmtTime, fmtDay } from "../lib/time.js";
-import { evStart, evEnd, evColor, evShort, evRange, evHosts, resolveType, statusOf } from "../lib/events.js";
+import { fmtTime } from "../lib/time.js";
+import { evStart, evColor, evShort, evRange, evHosts, resolveType, statusOf } from "../lib/events.js";
 
 export function ArchivePage(p) {
   const T = useT();

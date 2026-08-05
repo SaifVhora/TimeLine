@@ -10,6 +10,18 @@ export const THEME = {
     solidBtn: "rgba(255,255,255,0.93)", solidInk: "#04060D", isDark: true,
     inkA: "#0B1224", inkB: "#04060D",
   },
+  /* Nova — the v2 look: deeper ink, aurora accents, comet on the line */
+  nova: {
+    canvas: "radial-gradient(1300px 760px at 50% 30%, #0A1122 0%, #05070F 70%), #05070F",
+    text: "#EAF0FF", body: "#AFB9D4", muted: "#6F7C99",
+    hair: "rgba(160,180,255,0.13)", panel: "rgba(120,150,255,0.055)", field: "rgba(120,150,255,0.055)",
+    sheet: "linear-gradient(180deg,#101A32,#070B16)", bar: "rgba(5,7,15,0.78)",
+    current: "#E8C87A", currentSoft: "rgba(232,200,122,.9)", bloom: "rgba(232,200,122,.4)",
+    silver: "#C3CEE3", gold: "#E8C87A", live: "#5FE6B0", soon: "#F2C55C", danger: "#FF7285",
+    star: "220,230,255", nebulaA: "rgba(139,123,255,.18)", nebulaB: "rgba(53,214,192,.10)",
+    solidBtn: "linear-gradient(92deg,#8B7BFF,#35D6C0)", solidInk: "#05070F", isDark: true,
+    inkA: "#0A1122", inkB: "#05070F", comet: true,
+  },
   light: {
     canvas: "radial-gradient(1200px 640px at 50% 30%, #FFFFFF 0%, #EEF0F8 70%), #EAEDF6",
     text: "#0A1020", body: "#39415A", muted: "#6B7590",
@@ -64,6 +76,14 @@ export const globalCSS = (T) => `
   .ray { stroke-dasharray: 4 8; animation: dashFlow 3s linear infinite; }
   .draw { transform-origin: center; animation: drawLine .8s cubic-bezier(.2,.8,.2,1) both; }
   .fadein { animation: fadeIn .6s ease both; }
+  @keyframes cometRun { from { background-position: -240px 0; } to { background-position: calc(100% + 240px) 0; } }
+  .comet { position: relative; }
+  .comet::after { content: ""; position: absolute; inset: -1px 0;
+    background: linear-gradient(90deg, transparent, ${T.currentSoft}, transparent);
+    background-size: 240px 100%; background-repeat: no-repeat;
+    animation: cometRun 5.5s linear infinite; opacity: .65; pointer-events: none; }
+  .lift { transition: transform .28s cubic-bezier(.2,.8,.3,1.1), border-color .28s ease, box-shadow .28s ease; will-change: transform; }
+  .lift:hover { transform: translateY(-3px); }
   .scroller::-webkit-scrollbar { height: 6px; }
   .scroller::-webkit-scrollbar-thumb { background: ${T.hair}; border-radius: 6px; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }

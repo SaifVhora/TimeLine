@@ -2,7 +2,7 @@ import { h, useState, useEffect, useRef } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, Btn, Label } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { Download, Upload, History, Undo, Trash, AlertCircle, Check, X, Database, ShieldAlert } from "../icons.js";
+import { Download, Upload, History, Undo, Trash, AlertCircle, X, Database, ShieldAlert } from "../icons.js";
 import { ago, nowISO } from "../lib/time.js";
 import { listBackups, backupById, deleteBackup, downloadBackup, parseBackup, readFile,
          maybeSnapshot, trashOf, summariseRestore, countsOf } from "../store/backup.js";

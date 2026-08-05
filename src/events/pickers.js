@@ -1,6 +1,6 @@
 import { h, useState, useEffect, useMemo } from "../react.js";
-import { DISPLAY, MONO, BODY } from "../theme.js";
-import { useT, useInput, Label } from "../ui/atoms.js";
+import { MONO, BODY } from "../theme.js";
+import { useT, Label } from "../ui/atoms.js";
 import { ChevronLeft, ChevronRight, BadgeCheck, X } from "../icons.js";
 import { sameDay, clockParts, withClock } from "../lib/time.js";
 

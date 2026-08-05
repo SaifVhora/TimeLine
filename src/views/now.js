@@ -1,7 +1,7 @@
 import { h, useMemo } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, Btn, Label } from "../ui/atoms.js";
-import { Trophy, Users, AlertCircle, Plus, Check } from "../icons.js";
+import { Trophy, Users, Plus, Check } from "../icons.js";
 import { fmtDay, fmtTime, countdown } from "../lib/time.js";
 import { evColor, evShort, evRange, statusOf } from "../lib/events.js";
 import { buildTodo } from "../lib/todo.js";
