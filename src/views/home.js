@@ -30,7 +30,9 @@ export function Home(p) {
 
       h("div", { style: { fontFamily: DISPLAY, fontSize: 46, lineHeight: 1.05, letterSpacing: "0.02em",
         animation: "floatUp .7s ease both", animationDelay: ".05s" } }, "Every event,"),
-      h("div", { style: { fontFamily: DISPLAY, fontSize: 46, lineHeight: 1.05, letterSpacing: "0.02em", color: T.muted,
+      h("div", { style: { fontFamily: DISPLAY, fontSize: 46, lineHeight: 1.05, letterSpacing: "0.02em",
+        ...(T.nova ? { background: "linear-gradient(92deg," + T.silver + "," + T.live + " 55%," + T.gold + ")",
+          WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } : { color: T.muted }),
         animation: "floatUp .7s ease both", animationDelay: ".12s" } }, "one line of light."),
 
       h("p", { className: "mt-5 max-w-md text-sm", style: { color: T.body, lineHeight: 1.7,

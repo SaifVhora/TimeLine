@@ -164,3 +164,11 @@ the same rule, so an exported month matches what you see.
 - 31 dead imports removed across 15 files.
 - The hub → server zoom is a smoother, GPU-friendly scale instead of the old
   scale(7) jump. Service worker bumped to v24 and now refreshes CSS too.
+
+## Round 3 — Nova is now a full look, not just colours
+In the Nova theme: the hub becomes a grid of glass cards with orb glows and a
+live badge per server, timeline events render as lifting glass cards (live
+ones get a glowing border and a progress shimmer), the NOW beacon pulses an
+expanding ring, the home title gets the aurora gradient, and the sync dot
+glows "LIVE · SYNCED". Classic dark and light are untouched — cycle themes
+with the header button. (sw bumped to v25.)

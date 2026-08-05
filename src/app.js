@@ -21,14 +21,15 @@ import { Setup } from "./views/setup.js";
 function SyncLine(p) {
   const T = useT();
   const map = {
-    synced:  { dot: T.live,    text: "Synced " + ago(p.lastSync) },
+    synced:  { dot: T.live,    text: (T.nova ? "Live \u00B7 synced " : "Synced ") + ago(p.lastSync) },
     syncing: { dot: T.current, text: "Syncing\u2026" },
     offline: { dot: T.gold,    text: "Offline \u00B7 retrying" },
   }[p.conn];
   return h("div", { className: "flex items-center gap-1.5",
     style: { fontFamily: MONO, fontSize: 9, color: T.muted, letterSpacing: "0.12em" } },
-    h("span", { className: p.conn !== "synced" ? "breathe" : "",
-      style: { width: 5, height: 5, borderRadius: 5, background: map.dot, display: "inline-block" } }),
+    h("span", { className: p.conn !== "synced" || T.nova ? "breathe" : "",
+      style: { width: 5, height: 5, borderRadius: 5, background: map.dot, display: "inline-block",
+        boxShadow: T.nova ? "0 0 8px " + map.dot : "none" } }),
     h("span", { style: { color: p.conn === "offline" ? T.gold : T.muted } }, map.text.toUpperCase()),
     h("span", { className: "hidden sm:inline" }, "\u00B7 " + p.count + " " + p.unit));
 }

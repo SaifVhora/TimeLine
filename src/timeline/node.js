@@ -41,10 +41,18 @@ export function TimelineNode(p) {
         background: c.star, border: "1px solid " + c.star, borderRadius: 2, cursor: "pointer",
         boxShadow: c.glow ? "0 0 12px " + c.star : "0 0 6px " + T.current + "55" } }),
 
-    /* card */
-    h("button", { onClick: p.onOpen, className: "absolute text-left",
-      style: { left: 12, top: up ? -(p.arm + p.card) : p.arm + 4, width: 150,
-        opacity: on ? 1 : c.dim, transition: "opacity .2s ease", background: "none", border: "none", cursor: "pointer", padding: 0 } },
+    /* card — Nova renders it as lifting glass; classic stays airy text */
+    h("button", { onClick: p.onOpen, className: "absolute text-left" + (T.nova ? " lift" : ""),
+      style: T.nova
+        ? { left: 6, top: up ? -(p.arm + p.card) : p.arm + 4, width: 158,
+            opacity: on ? 1 : Math.max(c.dim, st === "past" ? 0.55 : 0.92),
+            background: "rgba(14,20,40,0.72)", backdropFilter: "blur(10px)",
+            border: "1px solid " + (st === "live" ? T.live + "66" : T.hair),
+            boxShadow: st === "live" ? "0 0 22px rgba(95,230,176,0.13)" : "none",
+            borderRadius: 12, cursor: "pointer", padding: "9px 11px",
+            transition: "opacity .2s ease, border-color .25s ease" }
+        : { left: 12, top: up ? -(p.arm + p.card) : p.arm + 4, width: 150,
+            opacity: on ? 1 : c.dim, transition: "opacity .2s ease", background: "none", border: "none", cursor: "pointer", padding: 0 } },
       h("div", { className: "truncate", style: { fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.12em", color: c.head } },
         evShort(ev) + (ev.allDay ? " \u00B7 ALL DAY" : " \u00B7 " + fmtTime(ev.start)) + (st === "live" ? " \u00B7 LIVE" : "")),
       h("div", { className: "mt-1", style: { fontFamily: DISPLAY, fontSize: 14, lineHeight: 1.25, color: T.text,
@@ -59,5 +67,7 @@ export function TimelineNode(p) {
       st === "upcoming" || st === "soon"
         ? h("div", { className: "mt-0.5", style: { fontFamily: MONO, fontSize: 8.5, color: st === "soon" ? T.soon : T.muted } },
             countdown(ev.start, p.now).toUpperCase())
-        : null));
+        : null,
+      T.nova && st === "live" ? h("div", { className: "fillbar", style: { height: 2, borderRadius: 2, marginTop: 7,
+        background: "linear-gradient(90deg, " + T.live + ", transparent)" } }) : null));
 }

@@ -20,7 +20,7 @@ export const THEME = {
     silver: "#C3CEE3", gold: "#E8C87A", live: "#5FE6B0", soon: "#F2C55C", danger: "#FF7285",
     star: "220,230,255", nebulaA: "rgba(139,123,255,.18)", nebulaB: "rgba(53,214,192,.10)",
     solidBtn: "linear-gradient(92deg,#8B7BFF,#35D6C0)", solidInk: "#05070F", isDark: true,
-    inkA: "#0A1122", inkB: "#05070F", comet: true,
+    inkA: "#0A1122", inkB: "#05070F", comet: true, nova: true,
   },
   light: {
     canvas: "radial-gradient(1200px 640px at 50% 30%, #FFFFFF 0%, #EEF0F8 70%), #EAEDF6",
@@ -84,6 +84,8 @@ export const globalCSS = (T) => `
     animation: cometRun 5.5s linear infinite; opacity: .65; pointer-events: none; }
   .lift { transition: transform .28s cubic-bezier(.2,.8,.3,1.1), border-color .28s ease, box-shadow .28s ease; will-change: transform; }
   .lift:hover { transform: translateY(-3px); }
+  @keyframes fillbar { 0%,100% { width: 52%; } 50% { width: 72%; } }
+  .fillbar { animation: fillbar 4s ease-in-out infinite; }
   .scroller::-webkit-scrollbar { height: 6px; }
   .scroller::-webkit-scrollbar-thumb { background: ${T.hair}; border-radius: 6px; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }

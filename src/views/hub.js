@@ -21,6 +21,51 @@ export function Hub(p) {
       count: p.events.filter((e) => e.serverId === s.id).length };
   }), [p.servers, p.events, n]);
 
+  const orbColors = [T.currentSoft, T.live, T.gold, T.danger];
+  const liveOf = (sid) => p.events.find((e) => e.serverId === sid &&
+    (() => { const t = Date.now(), st = new Date(e.start).getTime(); return t >= st && t <= st + ((e.durationMin || 90) * 60000); })());
+
+  /* Nova — the hub as a grid of glass cards with orb glows */
+  if (T.nova) return h("div", { className: "h-full flex flex-col relative overflow-y-auto" },
+    h("div", { className: "absolute inset-0 pointer-events-none" }, h(Stars, { width: 1400, height: 900, T, density: 11 })),
+    h("div", { className: "relative px-4 pt-6 pb-1 text-center shrink-0" },
+      h("div", { style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.24em", color: T.muted } }, "SELECT A SERVER")),
+    h("div", { className: "relative flex-1 w-full mx-auto px-5 py-6", style: { maxWidth: 860 } },
+      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 } },
+        p.servers.map((s, i) => {
+          const count = p.events.filter((e) => e.serverId === s.id).length;
+          const lv = liveOf(s.id);
+          return h("button", { key: s.id, className: "lift text-left relative",
+            onClick: (e) => p.onEnter(s, Math.round(e.clientX / window.innerWidth * 100) + "% " + Math.round(e.clientY / window.innerHeight * 100) + "%"),
+            style: { border: "1px solid " + T.hair, borderRadius: 16, padding: "18px",
+              background: "linear-gradient(160deg, rgba(139,123,255,0.08), rgba(6,9,18,0.4))",
+              cursor: "pointer", overflow: "hidden", color: T.text } },
+            h("div", { style: { position: "absolute", right: -24, top: -24, width: 90, height: 90, borderRadius: "50%",
+              filter: "blur(26px)", opacity: 0.5, background: orbColors[i % orbColors.length], pointerEvents: "none" } }),
+            h("div", { style: { fontFamily: DISPLAY, fontSize: 17, marginBottom: 6 } }, s.name),
+            h("div", { style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.14em", color: T.muted } },
+              count + " EVENT" + (count === 1 ? "" : "S")),
+            lv ? h("div", { className: "inline-flex items-center gap-1.5 mt-2.5",
+              style: { fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em", color: T.live } },
+              h("span", { className: "breathe", style: { width: 5, height: 5, borderRadius: 5, background: T.live,
+                boxShadow: "0 0 6px " + T.live, display: "inline-block" } }), lv.title.toUpperCase().slice(0, 22) + " LIVE") : null,
+            p.canManage ? h("span", { onClick: (e) => { e.stopPropagation(); p.onRemove(s.id); },
+              className: "inline-flex items-center gap-1 mt-2.5 px-1.5 py-0.5 rounded",
+              style: { fontFamily: MONO, fontSize: 8, color: T.danger, border: "1px solid " + T.danger + "44", marginLeft: lv ? 10 : 0 } },
+              h(Trash, { size: 8 }), " REMOVE") : null);
+        })),
+      p.servers.length === 0 ? h("div", { className: "text-center py-16" },
+        h("div", { style: { fontFamily: DISPLAY, fontSize: 18 } }, "A sky with no stars yet"),
+        h("p", { className: "mt-1.5 text-sm", style: { color: T.muted } }, "Add a server and it becomes a card here.")) : null),
+    h("div", { className: "relative text-center pb-5 pt-1 shrink-0" },
+      p.canManage && !adding ? h(Btn, { tone: "gold", onClick: () => setAdding(true) }, h(Plus, { size: 13 }), " Add a server") : null,
+      p.canManage && adding ? h("div", { className: "mx-auto flex gap-2 px-4", style: { maxWidth: 360 } },
+        h("input", { autoFocus: true, style: input, value: name, onChange: (e) => setName(e.target.value), placeholder: "Server name" }),
+        h(Btn, { tone: "solid", disabled: !name.trim(), onClick: () => { p.onCreate(name.trim()); setName(""); setAdding(false); } }, "Add"),
+        h(Btn, { onClick: () => { setAdding(false); setName(""); } }, h(X, { size: 14 }))) : null,
+      h("div", { className: "mt-2", style: { fontFamily: MONO, fontSize: 9, color: T.muted, letterSpacing: "0.14em" } },
+        "TAP A CARD TO TRAVEL INTO ITS TIMELINE")));
+
   return h("div", { className: "h-full flex flex-col relative" },
     h("div", { className: "absolute inset-0 pointer-events-none" }, h(Stars, { width: 1400, height: 900, T, density: 11 })),
     h("div", { className: "relative px-4 pt-5 pb-1 text-center shrink-0" },

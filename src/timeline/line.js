@@ -339,6 +339,8 @@ export function Line(p) {
               background: "linear-gradient(180deg, transparent, " + T.gold + ", transparent)", opacity: 0.8 } }),
             h("div", { className: "absolute breathe", style: { left: xOf(p.now) - 4, top: lineY - 4, width: 8, height: 8,
               borderRadius: 8, background: T.gold, boxShadow: "0 0 14px " + T.gold } }),
+            T.nova ? h("div", { className: "absolute", style: { left: xOf(p.now) - 7, top: lineY - 7, width: 14, height: 14,
+              borderRadius: 14, border: "1.5px solid " + T.gold, animation: "pulseRing 2.2s ease-out infinite", pointerEvents: "none" } }) : null,
             h("div", { className: "absolute whitespace-nowrap", style: { left: xOf(p.now) + 10, top: lineY - ARM - 16,
               fontFamily: MONO, fontSize: 9, letterSpacing: "0.2em", color: T.gold } }, "NOW")) : null,
 
