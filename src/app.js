@@ -16,6 +16,8 @@ import { hashPass, newKey, uid, appLink } from "./lib/util.js";
 import { nowISO, ago } from "./lib/time.js";
 import { Setup } from "./views/setup.js";
 
+export const BUILD = 26;
+
 
 
 function SyncLine(p) {
@@ -31,7 +33,8 @@ function SyncLine(p) {
       style: { width: 5, height: 5, borderRadius: 5, background: map.dot, display: "inline-block",
         boxShadow: T.nova ? "0 0 8px " + map.dot : "none" } }),
     h("span", { style: { color: p.conn === "offline" ? T.gold : T.muted } }, map.text.toUpperCase()),
-    h("span", { className: "hidden sm:inline" }, "\u00B7 " + p.count + " " + p.unit));
+    h("span", { className: "hidden sm:inline" }, "\u00B7 " + p.count + " " + p.unit),
+    h("span", null, "\u00B7 V" + BUILD));
 }
 
 function App() {
@@ -39,7 +42,8 @@ function App() {
   const dirty = useRef(false);
   const [db, setDb] = useState(() => cache.db() || normalize(null));
   const [me, setMe] = useState(null);
-  const [mode, setMode] = useState(() => (cache.pref() || {}).mode || "dark");
+  /* Nova is the default look now; old saved prefs migrate to it once */
+  const [mode, setMode] = useState(() => { const pf = cache.pref() || {}; return pf.v2 ? (pf.mode || "nova") : "nova"; });
   const [textSize, setTextSize] = useState(() => (cache.pref() || {}).textSize || 1);
   const [booted, setBooted] = useState(false);
   const [conn, setConn] = useState("syncing");
@@ -97,6 +101,8 @@ function App() {
   }, [booted, sync]);
 
   useEffect(() => {
+    const pf = cache.pref() || {};
+    if (!pf.v2) cache.savePref({ v2: true, mode: "nova", textSize: pf.textSize || 1 });
     let mine = cache.me();
     if (!mine || !mine.key) mine = { name: (mine && mine.name) || "", key: newKey() };
     setMe(mine); cache.saveMe(mine);
@@ -195,7 +201,7 @@ function App() {
     saveMe({ ...me, ...(name ? { name: name.trim() } : {}), ...(hash ? { hasPass: true } : {}) });
   };
 
-  const savePref = (patch) => cache.savePref({ mode, textSize, ...patch });
+  const savePref = (patch) => cache.savePref({ v2: true, mode, textSize, ...patch });
   /* three looks now: classic dark → nova (the v2 sky) → light */
   const flip = () => {
     const order = ["dark", "nova", "light"];
