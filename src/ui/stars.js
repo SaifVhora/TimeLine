@@ -11,6 +11,7 @@ export function Stars({ width, height, T, density = 14 }) {
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;                     /* no canvas, no starfield — never a white screen */
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = width * dpr; canvas.height = height * dpr;
     ctx.scale(dpr, dpr);

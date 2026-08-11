@@ -20,7 +20,14 @@ export function announcement(ev) {
     pl ? pl.emoji + " " + (ev.where.channel.startsWith("#") ? ev.where.channel : "#" + ev.where.channel) : "",
     hosts.length ? "\uD83C\uDF99\uFE0F Hosted by " + hosts.join(", ") : "",
     resultText ? "\uD83C\uDFC6 " + resultText : "",
-    ...w.map((x, i) => (medals[i] || "\uD83C\uDFC5") + " **" + x.name + "**" + (x.score ? " \u2014 " + x.score : "") + (x.prize ? " \u00B7 " + x.prize : "")),
+    ...w.map((x, i) => {
+      const pts = String(x.points || x.score || "").trim();
+      /* a real user id becomes a ping, so winners actually get notified */
+      const who = x.uid ? "<@" + String(x.uid).trim() + ">" : "**" + x.name + "**";
+      return (medals[i] || "\uD83C\uDFC5") + " " + who
+        + (pts ? " \u2014 " + pts + " pts" : "")
+        + (x.prize ? " \u00B7 " + x.prize : "");
+    }),
     ...(ev.attachments || []).filter((f) => f.url).map((f) => "\uD83D\uDD17 " + (f.label || "Results") + ": " + f.url),
     (ev.participants || []).length ? "\n\uD83D\uDC65 " + ev.participants.length + " joined: " + ev.participants.join(", ") : "",
     ev.notes ? "\n\uD83D\uDCDD " + ev.notes : "",

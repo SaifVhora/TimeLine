@@ -7,6 +7,7 @@ import { Crosshair, ArrowLeft, ChevronLeft, ChevronRight, Plus, Download } from 
 import { PAD_X } from "../config.js";
 import { DAY, startOfDay, fmtDay } from "../lib/time.js";
 import { evStart, evEnd, evColor, statusOf } from "../lib/events.js";
+import { brStart, brEnd, brWho, brLive } from "../lib/breaks.js";
 import { layoutCards, layoutBands } from "./lanes.js";
 import { TimelineNode } from "./node.js";
 import { exportMonthPNG } from "./export.js";
@@ -304,6 +305,31 @@ export function Line(p) {
         h("div", { className: "relative h-full", style: { width } },
           h("div", { ref: starLayer, className: "absolute inset-0", style: { willChange: "transform" } },
             h(Stars, { width, height: H, T })),
+
+          /* staff breaks — a curtain across the line, not a node on it */
+          (p.breaks || []).map((b) => {
+            const bx = xOf(brStart(b)), bx2 = xOf(brEnd(b));
+            if (bx2 < -40 || bx > width + 40) return null;
+            const live = brLive(b, p.now);
+            const w = Math.max(6, bx2 - bx);
+            return h("div", { key: "brk" + b.id,
+              onClick: () => { if (p.onOpenBreak && drag.current.moved < 6) p.onOpenBreak(b); },
+              className: "absolute",
+              style: { left: bx, top: 0, width: w, bottom: 0, zIndex: 1,
+                cursor: p.onOpenBreak ? "pointer" : "default",
+                borderLeft: "1px dashed " + T.gold + "88", borderRight: "1px dashed " + T.gold + "88",
+                background: "repeating-linear-gradient(135deg, " + T.gold + "14 0 8px, transparent 8px 18px)",
+                opacity: live ? 1 : 0.75 } },
+              h("div", { className: "absolute whitespace-nowrap px-1.5 py-1 " + (live ? "breathe" : ""),
+                style: { left: 4, top: 6, fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.14em",
+                  color: T.gold, background: T.sheet, border: "1px solid " + T.gold + "44", borderRadius: 6,
+                  maxWidth: Math.max(60, w - 8), overflow: "hidden", textOverflow: "ellipsis" } },
+                (live ? "\u25CF ON BREAK \u00B7 " : "BREAK \u00B7 ") + b.title.toUpperCase()),
+              w > 110 ? h("div", { className: "absolute whitespace-nowrap",
+                style: { left: 6, bottom: 8, fontFamily: MONO, fontSize: 8, letterSpacing: "0.12em",
+                  color: T.muted, maxWidth: w - 12, overflow: "hidden", textOverflow: "ellipsis" } },
+                brWho(b).toUpperCase() + (b.reason ? " \u00B7 " + b.reason.toUpperCase() : "")) : null);
+          }),
 
           months.map((m) => h("div", { key: m.t, className: "absolute", style: { left: xOf(Math.max(m.t, range.start)), top: gateTop } },
             h("div", { style: { width: 1, height: lineY - gateTop, background: "linear-gradient(180deg, transparent, " + T.hair + ")" } }),

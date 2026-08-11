@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Plus, Trophy, Download, Crosshair } from "..
 import { exportCalendarPNG } from "../timeline/calendar-png.js";
 import { DAY, MIN, startOfDay, sameDay, fmtTime, fmtDay, fmtD } from "../lib/time.js";
 import { evStart, evEnd, evColor, evShort, evHosts, isMultiDay, statusOf } from "../lib/events.js";
+import { brStart, brEnd, brWho, brRange } from "../lib/breaks.js";
 
 export function CalendarPage(p) {
   const T = useT();
@@ -33,6 +34,23 @@ export function CalendarPage(p) {
     });
     return map;
   }, [p.events, monthStart, monthEnd]);
+
+  /* which days the team is off — drawn as a hatch behind the number */
+  const breakDays = useMemo(() => {
+    const map = {};
+    (p.breaks || []).forEach((b) => {
+      const s = startOfDay(brStart(b)), e = brEnd(b) - MIN;
+      for (let t = s; t <= e; t += DAY) {
+        if (t < monthStart - DAY || t >= monthEnd + DAY) continue;
+        map[startOfDay(t)] = b;
+      }
+    });
+    return map;
+  }, [p.breaks, monthStart, monthEnd]);
+
+  const monthBreaks = useMemo(() =>
+    (p.breaks || []).filter((b) => brEnd(b) > monthStart && brStart(b) < monthEnd),
+    [p.breaks, monthStart, monthEnd]);
 
   const monthList = useMemo(() =>
     p.events.filter((ev) => evEnd(ev) > monthStart && evStart(ev) < monthEnd)
@@ -186,7 +204,8 @@ export function CalendarPage(p) {
         h("div", { className: "min-w-0" },
           h("div", { className: "truncate", style: { fontFamily: DISPLAY, fontSize: 23, lineHeight: 1.1 } }, monthName),
           h("div", { style: { fontFamily: MONO, fontSize: 9, color: T.muted, letterSpacing: "0.16em" } },
-            monthList.length + " EVENT" + (monthList.length === 1 ? "" : "S"))),
+            monthList.length + " EVENT" + (monthList.length === 1 ? "" : "S") +
+            (monthBreaks.length ? " \u00B7 " + monthBreaks.length + " BREAK" + (monthBreaks.length === 1 ? "" : "S") : ""))),
         h("div", { className: "ml-auto flex items-center gap-1.5 flex-wrap" },
           action("TODAY", h(Crosshair, { size: 11 }), jumpToday),
           action(busy ? "RENDERING" : "EXPORT", h(Download, { size: 11 }), () => setExportOpen(true), "busy"),
@@ -207,11 +226,16 @@ export function CalendarPage(p) {
             const list = byDay[key] || [];
             const isToday = sameDay(c, p.now);
             const isPicked = picked === key;
+            const brk = breakDays[key];
             return h("button", { key: key, onClick: () => setPicked(isPicked ? null : key),
+              title: brk ? brk.title + " \u2014 " + brWho(brk) : undefined,
               className: "rounded-xl flex flex-col items-center justify-start",
               style: { minHeight: 64, paddingTop: 9, cursor: "pointer",
-                background: isPicked ? T.gold + "1f" : "transparent",
-                border: "1px solid " + (isPicked ? T.gold + "88" : isToday ? T.gold + "55" : T.hair),
+                background: isPicked ? T.gold + "1f"
+                  : brk ? "repeating-linear-gradient(135deg, " + T.gold + "16 0 6px, transparent 6px 14px)"
+                  : "transparent",
+                border: "1px solid " + (isPicked ? T.gold + "88" : isToday ? T.gold + "55" : brk ? T.gold + "3a" : T.hair),
+                borderStyle: brk && !isPicked ? "dashed" : "solid",
                 transition: "background .15s ease, border-color .15s ease" } },
               h("div", { style: { fontFamily: MONO, fontSize: 15, lineHeight: 1,
                 color: isToday || isPicked ? T.gold : list.length ? T.text : T.muted } }, c.getDate()),
@@ -239,6 +263,16 @@ export function CalendarPage(p) {
                 className: "ml-auto",
                 style: { fontFamily: MONO, fontSize: 8.5, color: T.gold, letterSpacing: "0.12em",
                   background: "none", border: "none", cursor: "pointer" } }, "CLEAR") : null),
+            monthBreaks.length ? h("div", { className: "px-1 pb-2 space-y-1" }, monthBreaks.map((b) =>
+              h("button", { key: b.id, onClick: () => p.onOpenBreak && p.onOpenBreak(b),
+                className: "w-full text-left px-2 py-1.5 rounded-lg",
+                style: { border: "1px dashed " + T.gold + "55", background: T.gold + "0f",
+                  cursor: p.onOpenBreak ? "pointer" : "default" } },
+                h("div", { style: { fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.14em", color: T.gold } },
+                  "ON BREAK \u00B7 " + brRange(b).toUpperCase()),
+                h("div", { className: "text-xs truncate", style: { color: T.body } },
+                  b.title + " \u00B7 " + brWho(b))))) : null,
+
             monthList.length === 0
               ? h("div", { className: "py-10 text-center text-sm", style: { color: T.muted } },
                   "Nothing this month.")

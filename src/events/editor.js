@@ -2,19 +2,24 @@ import { h, useState, useEffect } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, useInput, Btn, Label, Field, Toggle, Chip } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { X, Plus, CalendarDays, FileText, Trophy, Users } from "../icons.js";
+import { X, Plus, CalendarDays, FileText, Trophy, Users, RotateCw, Hourglass, AlertCircle } from "../icons.js";
 import { TYPES, PALETTE } from "../config.js";
 import { MIN, DAY, HOUR, fmtDay, fmtTime, fmtDur, sameDay, startOfDay } from "../lib/time.js";
 import { uid } from "../lib/util.js";
 import { resolveType, evHosts, kindFromType } from "../lib/events.js";
 import { DayPick, TimeField, HostsInput } from "./pickers.js";
+import { RULES, blankRepeat, repeatSummary, seriesStarts } from "../lib/recur.js";
+import { brConflicts, brLine } from "../lib/breaks.js";
 
 export const blankEvent = () => ({
   id: uid(), title: "", type: "vc", label: "", color: null, allDay: false, side: "auto",
   start: new Date(Date.now() + HOUR).toISOString(), durationMin: 90,
   hosts: [], where: { kind: "voice", channel: "" },
-  winners: [{ place: 1, name: "", prize: "", score: "" }], resultText: "", attachments: [], participants: [], notes: "",
+  winners: [blankWinner(1)], resultText: "", attachments: [], participants: [], notes: "",
+  repeat: blankRepeat(), series: null,
 });
+
+export const blankWinner = (place) => ({ place, name: "", uid: "", points: "", prize: "" });
 
 const TABS = [
   { id: "when", label: "When", icon: CalendarDays },
@@ -38,6 +43,9 @@ export function Editor(p) {
         side: p.ev.side || "auto", hosts: evHosts(p.ev),
         resultText: p.ev.resultText || "",
         resultMode: (p.ev.resultText || "").trim() ? "text" : "places",
+        repeat: p.ev.repeat && p.ev.repeat.rule ? p.ev.repeat : blankRepeat(),
+        series: p.ev.series || null,
+        scope: "one",
         end });
     } else setD(null);
     setTab("when");
@@ -46,7 +54,15 @@ export function Editor(p) {
 
   if (!d) return null;
 
+  const startMs = new Date(d.start).getTime();
+  const endMs = new Date(d.end).getTime();
+  const clash = brConflicts(p.breaks || [], startMs, endMs, d.type);
+  const blocked = clash.length > 0 && !d.overrideBreak;
+  const inSeries = !!(d.series && d.series.id);
+  const occurrences = seriesStarts(d.start, d.repeat).length;
+
   const set = (k, v) => setD((x) => ({ ...x, [k]: v }));
+  const setR = (k, v) => setD((x) => ({ ...x, repeat: { ...x.repeat, [k]: v }, overrideBreak: false }));
   const setW = (i, k, v) => setD((x) => { const w = [...(x.winners || [])]; w[i] = { ...w[i], [k]: v }; return { ...x, winners: w }; });
   const setF = (i, k, v) => setD((x) => { const a = [...(x.attachments || [])]; a[i] = { ...a[i], [k]: v }; return { ...x, attachments: a }; });
   const durMin = (x) => Math.max(5, Math.round((new Date(x.end) - new Date(x.start)) / MIN));
@@ -105,6 +121,10 @@ export function Editor(p) {
       resultText: d.resultMode === "text" ? (d.resultText || "").trim() : "",
       winners: d.resultMode === "text" ? [] : (d.winners || []).filter((w) => (w.name || "").trim()),
       attachments: (d.attachments || []).filter((f) => (f.url || "").trim()),
+      repeat: d.repeat && d.repeat.rule !== "none" ? d.repeat : null,
+      series: d.series || null,
+      _scope: inSeries ? (d.scope || "one") : "one",
+      _isNew: !(p.ev && p.ev.createdAt),
     });
   };
 
@@ -151,7 +171,65 @@ export function Editor(p) {
 
         h("div", { className: "text-xs", style: { color: T.muted } },
           d.allDay ? "All-day events run 12:00 AM on the first day to 11:59 PM on the last."
-                   : "Everyone sees these times in their own time zone.")) : null,
+                   : "Everyone sees these times in their own time zone."),
+
+        /* ── repeats ── */
+        h("div", { className: "pt-2" },
+          h(Label, null, h("span", { className: "inline-flex items-center gap-1.5" },
+            h(RotateCw, { size: 10 }), "Repeats")),
+          h("div", { className: "flex gap-1.5 flex-wrap" }, RULES.map((r) =>
+            h(Chip, { key: r.id, on: (d.repeat && d.repeat.rule || "none") === r.id,
+              onClick: () => setR("rule", r.id) }, r.label))),
+
+          d.repeat && d.repeat.rule !== "none" ? h("div", { className: "mt-3 space-y-2.5" },
+            h("div", { className: "flex gap-1.5 flex-wrap" },
+              h(Chip, { on: d.repeat.mode !== "until", onClick: () => setR("mode", "count") }, "A SET NUMBER OF TIMES"),
+              h(Chip, { on: d.repeat.mode === "until", onClick: () => setR("mode", "until") }, "UNTIL A DATE")),
+
+            d.repeat.mode === "until"
+              ? h("div", null,
+                  h(Label, null, "Repeat until"),
+                  h(DayPick, { value: d.repeat.until || d.end,
+                    onPick: (y, mo, dd) => setR("until", new Date(y, mo, dd, 23, 59).toISOString()) }))
+              : h("div", { className: "flex gap-1.5 flex-wrap items-center" },
+                  [2, 4, 6, 8, 12, 24].map((n) =>
+                    h(Chip, { key: n, on: Number(d.repeat.count) === n, onClick: () => setR("count", n) }, n + "\u00D7")),
+                  h("input", { type: "number", min: 1, max: 60, value: d.repeat.count || 1,
+                    onChange: (e) => setR("count", Math.max(1, Math.min(60, Number(e.target.value) || 1))),
+                    style: { ...input, maxWidth: 76, textAlign: "center" } })),
+
+            h("div", { className: "rounded-xl px-3 py-2.5",
+              style: { background: T.panel, border: "1px solid " + T.hair } },
+              h("div", { className: "text-sm" }, repeatSummary(d.repeat)),
+              h("div", { className: "mt-1", style: { fontFamily: MONO, fontSize: 9, color: T.gold, letterSpacing: "0.12em" } },
+                occurrences + " EVENT" + (occurrences === 1 ? "" : "S") + " WILL BE ADDED TO THE LINE"))) : null),
+
+        /* ── editing one of a repeating set ── */
+        inSeries ? h("div", { className: "rounded-xl p-3",
+          style: { background: T.panel, border: "1px solid " + T.hair } },
+          h(Label, null, "This is one of a repeating set"),
+          h("div", { className: "flex gap-1.5 flex-wrap" },
+            h(Chip, { on: (d.scope || "one") === "one", onClick: () => set("scope", "one") }, "THIS ONE ONLY"),
+            h(Chip, { on: d.scope === "future", onClick: () => set("scope", "future") }, "THIS & LATER ONES"),
+            h(Chip, { on: d.scope === "all", onClick: () => set("scope", "all") }, "THE WHOLE SET")),
+          h("div", { className: "mt-2 text-xs", style: { color: T.muted } },
+            (d.scope || "one") === "one"
+              ? "Only this occurrence changes."
+              : "Name, type, hosts, place, notes, length and start time travel to the others \u2014 each keeps its own date.")) : null,
+
+        /* ── break in the way ── */
+        clash.length ? h("div", { className: "rounded-xl p-3",
+          style: { background: "rgba(210,60,80,.09)", border: "1px solid rgba(210,60,80,.3)" } },
+          h("div", { className: "inline-flex items-center gap-1.5 mb-1.5",
+            style: { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: T.danger } },
+            h(Hourglass, { size: 11 }), "THE TEAM IS ON BREAK"),
+          clash.map((b) => h("div", { key: b.id, className: "text-sm" },
+            brLine(b), b.reason ? h("span", { style: { color: T.muted } }, " \u2014 " + b.reason) : null)),
+          h("div", { className: "mt-2.5 flex items-center gap-2 flex-wrap" },
+            h(Chip, { on: !!d.overrideBreak, onClick: () => set("overrideBreak", !d.overrideBreak) },
+              d.overrideBreak ? "OVERRIDDEN" : "SCHEDULE ANYWAY"),
+            h("span", { className: "text-xs", style: { color: T.muted } },
+              d.overrideBreak ? "Saving is unlocked." : "Move the date, or override to save regardless."))) : null) : null,
 
       tab === "what" ? h("div", { className: "space-y-4" },
         h(Field, { label: "Event name" },
@@ -212,20 +290,31 @@ export function Editor(p) {
                 onChange: (e) => set("resultText", e.target.value),
                 placeholder: "e.g. Ann took it with 42 points, Bo close behind" }))
           : h("div", null, h(Label, null, "Placements"),
-          h("div", { className: "space-y-2" }, (d.winners || []).map((w, i) =>
-            h("div", { key: i, className: "flex gap-2 items-center" },
-              h("span", { className: "w-8 shrink-0 text-center py-2 rounded-lg",
-                style: { background: "rgba(180,140,40,.1)", border: "1px solid rgba(180,140,40,.3)", fontFamily: MONO, fontSize: 10, color: T.gold } },
-                String(w.place || i + 1).padStart(2, "0")),
-              h("input", { style: input, value: w.name || "", onChange: (e) => setW(i, "name", e.target.value), placeholder: "Placement holder" }),
-              h("input", { style: { ...input, maxWidth: 92 }, value: w.score || "", onChange: (e) => setW(i, "score", e.target.value), placeholder: "Score" }),
-              h("input", { style: { ...input, maxWidth: 100 }, value: w.prize || "", onChange: (e) => setW(i, "prize", e.target.value), placeholder: "Prize" }),
-              h("button", { onClick: () => setD((x) => ({ ...x, winners: x.winners.filter((_, y) => y !== i) })),
-                style: { color: T.muted, background: "none", border: "none", cursor: "pointer" } }, h(X, { size: 15 }))))),
+          h("div", { className: "space-y-2.5" }, (d.winners || []).map((w, i) =>
+            h("div", { key: i, className: "rounded-xl p-2.5",
+              style: { background: T.panel, border: "1px solid " + T.hair } },
+              h("div", { className: "flex gap-2 items-center" },
+                h("span", { className: "w-8 shrink-0 text-center py-2 rounded-lg",
+                  style: { background: "rgba(180,140,40,.1)", border: "1px solid rgba(180,140,40,.3)", fontFamily: MONO, fontSize: 10, color: T.gold } },
+                  String(w.place || i + 1).padStart(2, "0")),
+                h("input", { style: input, value: w.name || "", onChange: (e) => setW(i, "name", e.target.value), placeholder: "Username" }),
+                h("button", { onClick: () => setD((x) => ({ ...x, winners: x.winners.filter((_, y) => y !== i) })),
+                  style: { color: T.muted, background: "none", border: "none", cursor: "pointer" } }, h(X, { size: 15 }))),
+              h("div", { className: "flex gap-2 mt-2 pl-10 flex-wrap" },
+                h("input", { style: { ...input, fontFamily: MONO, fontSize: 12, minWidth: 150, flex: 2 },
+                  value: w.uid || "", inputMode: "numeric",
+                  onChange: (e) => setW(i, "uid", e.target.value.replace(/[^0-9]/g, "")),
+                  placeholder: "User ID (optional)" }),
+                h("input", { style: { ...input, minWidth: 84, flex: 1 }, value: w.points || "",
+                  onChange: (e) => setW(i, "points", e.target.value), placeholder: "Points" }),
+                h("input", { style: { ...input, minWidth: 110, flex: 1.4 }, value: w.prize || "",
+                  onChange: (e) => setW(i, "prize", e.target.value), placeholder: "Reward" }))))),
           h("button", { className: "mt-2 inline-flex items-center gap-1.5 text-xs",
             style: { color: T.gold, background: "none", border: "none", cursor: "pointer" },
-            onClick: () => setD((x) => ({ ...x, winners: [...(x.winners || []), { place: (x.winners || []).length + 1, name: "", prize: "", score: "" }] })) },
-            h(Plus, { size: 12 }), " Add a place")),
+            onClick: () => setD((x) => ({ ...x, winners: [...(x.winners || []), blankWinner((x.winners || []).length + 1)] })) },
+            h(Plus, { size: 12 }), " Add a place"),
+          h("div", { className: "mt-2 text-xs", style: { color: T.muted } },
+            "Right-click a member in Discord \u2192 Copy User ID. With an ID the graphic can show it and the Discord post pings them.")),
 
         h("div", null, h(Label, null, "Attached results"),
           h("div", { className: "text-xs mb-2", style: { color: T.muted } }, "Link a results graphic, a message, or a full scoreboard."),
@@ -245,6 +334,8 @@ export function Editor(p) {
           onChange: (e) => setPeopleText(e.target.value), placeholder: "Add participants" })) : null,
 
       h("div", { className: "mt-6 flex gap-2" },
-        h(Btn, { tone: "solid", full: true, onClick: save }, "Save event"),
+        h(Btn, { tone: "solid", full: true, disabled: blocked, onClick: () => { if (!blocked) save(); } },
+          blocked ? h("span", { className: "inline-flex items-center gap-1.5" },
+            h(AlertCircle, { size: 13 }), "Blocked by a break") : "Save event"),
         h(Btn, { onClick: p.onClose }, "Cancel"))));
 }

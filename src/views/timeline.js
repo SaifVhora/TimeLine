@@ -1,7 +1,7 @@
 import { h, useState, useMemo, Fragment } from "../react.js";
 import { BODY } from "../theme.js";
 import { useT, Btn } from "../ui/atoms.js";
-import { Search, ChevronDown, ZoomIn, ZoomOut, Plus } from "../icons.js";
+import { Search, ChevronDown, ZoomIn, ZoomOut, Plus, Hourglass } from "../icons.js";
 import { TYPES, ZOOMS } from "../config.js";
 import { resolveType, evHosts, evStart } from "../lib/events.js";
 import { Line } from "../timeline/line.js";
@@ -38,9 +38,12 @@ export function TimelinePage(p) {
       h("div", { className: "ml-auto flex items-center gap-1.5" },
         h(Btn, { size: "sm", onClick: () => setZoom((z) => Math.max(0, z - 1)), disabled: zoom === 0 }, h(ZoomOut, { size: 13 })),
         h(Btn, { size: "sm", onClick: () => setZoom((z) => Math.min(2, z + 1)), disabled: zoom === 2 }, h(ZoomIn, { size: 13 })),
+        p.canCreate ? h(Btn, { tone: "gold", size: "sm", onClick: p.onAddBreak, title: "Add a staff break" },
+          h(Hourglass, { size: 13 }), h("span", { className: "hidden sm:inline" }, "Break")) : null,
         p.canCreate ? h(Btn, { tone: "solid", size: "sm", onClick: p.onAdd },
           h(Plus, { size: 14 }), h("span", { className: "hidden sm:inline" }, "New event")) : null)),
 
-    h(Line, { events: visible, now: p.now, zoom: ZOOMS[zoom], onOpen: p.onOpen, empty: p.events.length === 0,
+    h(Line, { events: visible, breaks: p.breaks, now: p.now, zoom: ZOOMS[zoom], onOpen: p.onOpen,
+      empty: p.events.length === 0, onOpenBreak: p.canCreate ? p.onOpenBreak : null,
       canCreate: p.canCreate, onAdd: p.onAdd, serverName: p.server.name, ping: p.ping }));
 }

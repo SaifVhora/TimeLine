@@ -2,7 +2,7 @@ import { h, useState, useEffect } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, useInput, Btn, Label, Toggle, Chip } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { X, Copy, Pencil, Trash, Link2, BadgeCheck, Download, Trophy, placeOf } from "../icons.js";
+import { X, Copy, Pencil, Trash, Link2, BadgeCheck, Download, Trophy, RotateCw, placeOf } from "../icons.js";
 import { PALETTE } from "../config.js";
 import { exportWinnerPNG } from "../timeline/winner-png.js";
 import { fmtFull, fmtTime, fmtDay, fmtDur, countdown, MIN } from "../lib/time.js";
@@ -49,6 +49,11 @@ export function Detail(p) {
             h(PlIcon, { size: 11 }), " " + pl.label + " \u00B7 " + ev.where.channel) : null),
         h("button", { onClick: p.onClose, style: { color: T.muted, background: "none", border: "none", cursor: "pointer" } }, h(X, { size: 19 }))),
 
+      ev.series && ev.series.id ? h("div", { className: "mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg",
+        style: { background: T.panel, border: "1px solid " + T.hair, fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", color: T.muted } },
+        h(RotateCw, { size: 10 }),
+        "REPEATING \u00B7 " + ((ev.series.index || 0) + 1) + " OF " + (ev.series.of || "?")) : null,
+
       hosts.length ? h(Block, { label: hosts.length > 1 ? "Hosts" : "Host" },
         h("div", { className: "flex flex-wrap gap-2" }, hosts.map((hst) =>
           h("span", { key: hst, className: "inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs",
@@ -60,12 +65,17 @@ export function Detail(p) {
         h("span", { style: { color: T.body, whiteSpace: "pre-wrap" } }, resultText)) : null,
 
       winners.length ? h(Block, { label: "Results" },
-        h("div", { className: "space-y-1.5" }, winners.map((w, i) =>
-          h("div", { key: i, className: "flex items-baseline gap-2.5" },
+        h("div", { className: "space-y-2" }, winners.map((w, i) => {
+          const pts = String(w.points || w.score || "").trim();
+          return h("div", { key: i, className: "flex items-baseline gap-2.5 flex-wrap" },
             h("span", { style: { fontFamily: MONO, fontSize: 10, color: T.gold } }, String(w.place || i + 1).padStart(2, "0")),
             h("span", { style: { fontWeight: (w.place || i + 1) === 1 ? 600 : 400 } }, w.name),
-            w.score ? h("span", { style: { fontFamily: MONO, fontSize: 10, color: T.muted } }, w.score) : null,
-            w.prize ? h("span", { className: "text-xs", style: { color: T.muted } }, w.prize) : null)))) : null,
+            w.uid ? h("span", { style: { fontFamily: MONO, fontSize: 9.5, color: T.muted } }, "ID " + w.uid) : null,
+            pts ? h("span", { className: "px-1.5 py-0.5 rounded-md",
+              style: { fontFamily: MONO, fontSize: 9.5, color: col, background: col + "1f", border: "1px solid " + col + "55" } },
+              pts + " PTS") : null,
+            w.prize ? h("span", { className: "text-xs", style: { color: T.body } }, w.prize) : null);
+        }))) : null,
 
       files.length ? h(Block, { label: "Attached \u00B7 " + files.length },
         h("div", { className: "flex flex-wrap gap-2" }, files.map((f, i) =>
@@ -96,7 +106,7 @@ export function Detail(p) {
 export function WinnerGfx(p) {
   const T = useT();
   const input = useInput();
-  const [o, setO] = useState({ heading: "WINNERS", note: "", color: null, showHosts: true, showDate: true });
+  const [o, setO] = useState({ heading: "WINNERS", note: "", color: null, showHosts: true, showDate: true, showIds: true });
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (p.open) setO((x) => ({ ...x, color: null })); }, [p.open]);
   if (!p.open || !p.ev) return null;
@@ -105,7 +115,7 @@ export function WinnerGfx(p) {
     setBusy(true);
     try {
       const ok = await exportWinnerPNG({ ev: p.ev, T, serverName: p.serverName,
-        heading: o.heading, note: o.note, color: o.color, showHosts: o.showHosts, showDate: o.showDate });
+        heading: o.heading, note: o.note, color: o.color, showHosts: o.showHosts, showDate: o.showDate, showIds: o.showIds });
       p.ping && p.ping(ok ? "Graphic saved to your downloads" : "The browser blocked the download", !ok);
       if (ok) p.onClose();
     } catch (e) {
@@ -135,12 +145,15 @@ export function WinnerGfx(p) {
             style: { width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
               border: o.color === c ? "2px solid " + T.text : "2px solid transparent" } })))),
 
-      h("div", { className: "mt-4" }, h(Label, null, "Note under the results"),
-        h("input", { style: input, value: o.note, maxLength: 70,
+      h("div", { className: "mt-4" }, h(Label, null, "Message"),
+        h("textarea", { rows: 3, style: { ...input, resize: "vertical" }, value: o.note, maxLength: 190,
           onChange: (e) => setO({ ...o, note: e.target.value }),
-          placeholder: "e.g. Thanks to everyone who turned up" })),
+          placeholder: "Anything you want written under the results \u2014 thanks, next event, rules" }),
+        h("div", { className: "mt-1 text-xs", style: { color: T.muted } },
+          (o.note || "").length + "/190 \u00B7 wraps to three lines on the card")),
 
       h("div", { className: "mt-4 space-y-3" },
+        h(Toggle, { on: o.showIds, label: "Show user IDs under names", onChange: (v) => setO({ ...o, showIds: v }) }),
         h(Toggle, { on: o.showDate, label: "Show the date", onChange: (v) => setO({ ...o, showDate: v }) }),
         h(Toggle, { on: o.showHosts, label: "Show who hosted", onChange: (v) => setO({ ...o, showHosts: v }) })),
 

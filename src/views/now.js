@@ -1,10 +1,11 @@
 import { h, useMemo } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, Btn, Label } from "../ui/atoms.js";
-import { Trophy, Users, Plus, Check } from "../icons.js";
+import { Trophy, Users, Plus, Check, Hourglass } from "../icons.js";
 import { fmtDay, fmtTime, countdown } from "../lib/time.js";
 import { evColor, evShort, evRange, statusOf } from "../lib/events.js";
 import { buildTodo } from "../lib/todo.js";
+import { brStart, brEnd, brRange, brWho, brLive } from "../lib/breaks.js";
 
 function Row(p) {
   const T = useT();
@@ -42,8 +43,29 @@ export function NowPage(p) {
   const todo = useMemo(() => buildTodo(p.events, p.now), [p.events, p.now]);
   const nothing = !todo.live.length && !todo.today.length && !todo.soon.length && !todo.count;
 
+  /* a break that is running or starts within a fortnight is worth saying out loud */
+  const soonBreaks = (p.breaks || [])
+    .filter((b) => brEnd(b) > p.now && brStart(b) < p.now + 14 * 86400000)
+    .sort((a, b) => brStart(a) - brStart(b));
+
   return h("div", { className: "h-full overflow-y-auto px-4 sm:px-7 pb-8 pt-2" },
     h("div", { className: "mx-auto w-full space-y-7", style: { maxWidth: 640 } },
+
+      soonBreaks.length ? h("div", { className: "space-y-2" }, soonBreaks.map((b) => {
+        const live = brLive(b, p.now);
+        return h("button", { key: b.id, onClick: () => p.onOpenBreak && p.onOpenBreak(b),
+          className: "w-full text-left p-3 rounded-xl",
+          style: { border: "1px dashed " + T.gold + "66", cursor: p.onOpenBreak ? "pointer" : "default",
+            background: "repeating-linear-gradient(135deg, " + T.gold + "12 0 8px, transparent 8px 18px)" } },
+          h("div", { className: "inline-flex items-center gap-1.5 " + (live ? "breathe" : ""),
+            style: { fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", color: T.gold } },
+            h(Hourglass, { size: 10 }),
+            live ? "THE TEAM IS ON BREAK" : "BREAK COMING UP"),
+          h("div", { className: "mt-1", style: { fontFamily: DISPLAY, fontSize: 16 } }, b.title),
+          h("div", { style: { fontFamily: MONO, fontSize: 9, color: T.muted, letterSpacing: "0.1em" } },
+            brRange(b).toUpperCase() + " \u00B7 " + brWho(b).toUpperCase()),
+          b.reason ? h("div", { className: "mt-1 text-xs", style: { color: T.body } }, b.reason) : null);
+      })) : null,
 
       nothing ? h("div", { className: "text-center py-16" },
         h(Check, { size: 22, style: { color: T.live, margin: "0 auto 12px" } }),

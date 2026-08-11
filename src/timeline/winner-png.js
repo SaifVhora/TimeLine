@@ -44,14 +44,18 @@ export async function exportWinnerPNG(opts) {
   const note = (opts.note || "").trim();
   const showHosts = opts.showHosts !== false;
   const showDate = opts.showDate !== false;
+  const showIds = opts.showIds !== false;
 
   const places = evWinners(ev);
   const text = evResultText(ev);
   const rows = places.length ? places.slice(0, 6) : [];
 
   const W = 1000;
-  const bodyH = rows.length ? rows.length * 104 : (text ? 150 : 90);
-  const H = 300 + bodyH + (note ? 80 : 0) + 90;
+  const ROWH = 116;
+  const bodyH = rows.length ? rows.length * ROWH : (text ? 150 : 90);
+  /* the message can run to three lines, so measure it before sizing the canvas */
+  const noteLines = note ? Math.min(3, Math.ceil(note.length / 52)) : 0;
+  const H = 300 + bodyH + (note ? 52 + noteLines * 32 : 0) + 90;
 
   const S = 2;
   const c = document.createElement("canvas");
@@ -109,26 +113,57 @@ export async function exportWinnerPNG(opts) {
     rows.forEach((w, i) => {
       const place = Number(w.place || i + 1);
       const top = place <= 3;
-      const x = 110, cw = W - 220;
+      const x = 110, cw = W - 220, rh = 98;
+      const pts = String(w.points || w.score || "").trim();
+      const reward = String(w.prize || "").trim();
+      const uidText = showIds && w.uid ? String(w.uid).trim() : "";
 
       g.fillStyle = top ? accent + "1f" : T.panel;
       g.strokeStyle = top ? accent + "66" : T.hair;
       g.lineWidth = 1;
-      roundRect(g, x, y, cw, 86, 14); g.fill(); g.stroke();
+      roundRect(g, x, y, cw, rh, 16); g.fill(); g.stroke();
 
+      /* place marker */
       g.textAlign = "center";
-      if (top) { g.font = "34px " + SERIF; g.fillText(MEDAL[place - 1], x + 46, y + 24); }
-      else { g.fillStyle = T.muted; g.font = "20px " + MONOF; g.fillText(String(place).padStart(2, "0"), x + 46, y + 32); }
-
-      g.textAlign = "left";
-      g.fillStyle = T.text; g.font = (top ? "34px " : "28px ") + SERIF;
-      g.fillText(clip(g, w.name, cw - 260), x + 86, y + (w.score || w.prize ? 16 : 26));
-
-      if (w.score || w.prize) {
-        g.fillStyle = T.muted; g.font = "15px " + MONOF;
-        g.fillText(clip(g, [w.score, w.prize].filter(Boolean).join("  \u00B7  "), cw - 260), x + 88, y + 54);
+      if (top) { g.font = "36px " + SERIF; g.fillText(MEDAL[place - 1], x + 50, y + 28); }
+      else {
+        g.fillStyle = T.muted; g.font = "20px " + MONOF;
+        g.fillText(String(place).padStart(2, "0"), x + 50, y + 38);
       }
-      y += 104;
+
+      /* points pill on the right, reward underneath it */
+      let rightEdge = x + cw - 26;
+      if (pts) {
+        g.font = "22px " + MONOF;
+        const label = pts + " PTS";
+        const pw = g.measureText(label).width + 34;
+        const px = rightEdge - pw, py = y + (reward ? 20 : 30);
+        g.fillStyle = accent + "2e"; g.strokeStyle = accent + "88"; g.lineWidth = 1;
+        roundRect(g, px, py, pw, 40, 20); g.fill(); g.stroke();
+        g.textAlign = "center"; g.fillStyle = accent;
+        g.fillText(label, px + pw / 2, py + 9);
+        rightEdge = px - 18;
+      }
+      if (reward) {
+        g.textAlign = "right";
+        g.fillStyle = pts ? T.body : T.text;
+        g.font = (pts ? "19px " : "23px ") + SERIF;
+        const rx = pts ? x + cw - 26 : rightEdge;
+        g.fillText(clip(g, reward, 300), rx, y + (pts ? 66 : 36));
+      }
+
+      /* name, with the user id sitting under it */
+      const nameW = cw - 130 - (pts || reward ? 330 : 60);
+      g.textAlign = "left";
+      g.fillStyle = T.text; g.font = (top ? "34px " : "29px ") + SERIF;
+      g.fillText(clip(g, w.name, nameW), x + 92, y + (uidText ? 20 : 30));
+
+      if (uidText) {
+        g.fillStyle = T.muted; g.font = "15px " + MONOF;
+        g.fillText(clip(g, "ID " + uidText, nameW), x + 94, y + 60);
+      }
+
+      y += ROWH;
     });
   } else if (text) {
     g.textAlign = "center";
@@ -145,11 +180,18 @@ export async function exportWinnerPNG(opts) {
   }
 
   if (note) {
-    g.textAlign = "center";
-    g.fillStyle = T.body; g.font = "22px " + SERIF;
-    g.fillText(clip(g, note, W - 180), W / 2, y + 14);
+    const nx = 110, nw = W - 220;
+    g.font = "22px " + SERIF;
+    const lines = wrap(g, note, nw - 60, 3);
+    const nh = 28 + lines.length * 32;
+    g.fillStyle = T.panel; g.strokeStyle = accent + "3a"; g.lineWidth = 1;
+    roundRect(g, nx, y + 8, nw, nh, 14); g.fill(); g.stroke();
+    g.fillStyle = accent; g.fillRect(nx, y + 22, 3, nh - 28);
+    g.textAlign = "center"; g.fillStyle = T.body;
+    let ny = y + 22;
+    lines.forEach((ln) => { g.fillText(ln, W / 2, ny); ny += 32; });
     g.textAlign = "left";
-    y += 70;
+    y += nh + 24;
   }
 
   g.textAlign = "center";
