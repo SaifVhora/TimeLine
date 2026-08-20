@@ -2,13 +2,17 @@ import { h, useState, useEffect } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, useInput, Btn, Label, Field, Toggle, Chip } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { X, Plus, CalendarDays, FileText, Trophy, Users, RotateCw, Hourglass, AlertCircle } from "../icons.js";
+import { X, Plus, CalendarDays, FileText, Trophy, Users, RotateCw, Hourglass, AlertCircle, Sparkles } from "../icons.js";
 import { TYPES, PALETTE } from "../config.js";
 import { MIN, DAY, HOUR, fmtDay, fmtTime, fmtDur, sameDay, startOfDay } from "../lib/time.js";
 import { uid } from "../lib/util.js";
 import { resolveType, evHosts, kindFromType } from "../lib/events.js";
 import { DayPick, TimeField, HostsInput } from "./pickers.js";
 import { RULES, blankRepeat, repeatSummary, seriesStarts } from "../lib/recur.js";
+import { SaveTemplate } from "./templates-modal.js";
+import { ChartCalc } from "./chart-calc.js";
+import { LEADS, remOf } from "../lib/reminders.js";
+import { hookList } from "../lib/webhooks.js";
 import { brConflicts, brLine } from "../lib/breaks.js";
 
 export const blankEvent = () => ({
@@ -32,6 +36,8 @@ export function Editor(p) {
   const T = useT();
   const input = useInput();
   const [d, setD] = useState(null);
+  const [savingTpl, setSavingTpl] = useState(false);
+  const [calc, setCalc] = useState(false);
   const [tab, setTab] = useState("when");
   const [peopleText, setPeopleText] = useState("");
 
@@ -217,6 +223,34 @@ export function Editor(p) {
               ? "Only this occurrence changes."
               : "Name, type, hosts, place, notes, length and start time travel to the others \u2014 each keeps its own date.")) : null,
 
+        /* ── reminders ── */
+        h("div", { className: "pt-1", style: { borderTop: "1px solid " + T.hair } },
+          h("div", { className: "pt-3" },
+            h(Label, null, "Remind Discord before it starts"),
+            (p.hooks || []).length
+              ? h("div", null,
+                  h("div", { className: "flex gap-1.5 flex-wrap" }, LEADS.map((l) => {
+                    const on = ((d.remind && d.remind.leads) || []).includes(l.id);
+                    return h(Chip, { key: l.id, on,
+                      onClick: () => setD((x) => {
+                        const cur = (x.remind && x.remind.leads) || [];
+                        const leads = on ? cur.filter((n) => n !== l.id) : [...cur, l.id];
+                        return { ...x, remind: { ...(x.remind || {}), leads,
+                          hook: (x.remind && x.remind.hook) || (p.hooks[0] && p.hooks[0].id) } };
+                      }) }, l.label);
+                  })),
+                  ((d.remind && d.remind.leads) || []).length
+                    ? h("div", { className: "mt-2.5" },
+                        h("div", { style: { fontFamily: MONO, fontSize: 9.5, color: T.muted, marginBottom: 5 } }, "POST IT IN"),
+                        h("div", { className: "flex gap-1.5 flex-wrap" }, p.hooks.map((w) =>
+                          h(Chip, { key: w.id, on: (d.remind && d.remind.hook) === w.id,
+                            onClick: () => setD((x) => ({ ...x, remind: { ...(x.remind || {}), hook: w.id } })) },
+                            w.name.toUpperCase()))))
+                    : h("div", { className: "mt-1.5 text-xs", style: { color: T.muted } },
+                        "Off \u2014 nothing gets posted automatically."))
+              : h("div", { className: "text-xs", style: { color: T.muted } },
+                  "Connect a Discord channel in the admin panel first, then reminders can post there."))),
+
         /* ── break in the way ── */
         clash.length ? h("div", { className: "rounded-xl p-3",
           style: { background: "rgba(210,60,80,.09)", border: "1px solid rgba(210,60,80,.3)" } },
@@ -284,6 +318,19 @@ export function Editor(p) {
               ? "Free text \u2014 write it however you like."
               : "Ranked list with scores and prizes.")),
 
+        /* chat chart events score themselves from a pasted chart */
+        (d.resultMode || "places") === "places"
+          ? h("button", {
+              onClick: () => setCalc(true),
+              className: "w-full text-left px-3 py-2.5 rounded-xl",
+              style: { background: T.field, border: "1px solid " + T.hair, cursor: "pointer", color: T.body },
+            },
+              h("div", { className: "inline-flex items-center gap-2", style: { fontFamily: DISPLAY, fontSize: 15 } },
+                h(Trophy, { size: 14, style: { color: T.gold } }), "Score a chat chart"),
+              h("div", { className: "mt-0.5", style: { fontFamily: MONO, fontSize: 9.5, color: T.muted } },
+                "SET THE POINTS \u00B7 PASTE THE CHART \u00B7 FILLS THE PLACEMENTS"))
+          : null,
+
         d.resultMode === "text"
           ? h(Field, { label: "Result", hint: "Shown on the event and copied into the Discord post" },
               h("textarea", { rows: 4, style: { ...input, resize: "vertical" }, value: d.resultText || "",
@@ -333,9 +380,30 @@ export function Editor(p) {
         h("textarea", { rows: 6, style: { ...input, resize: "vertical" }, value: peopleText,
           onChange: (e) => setPeopleText(e.target.value), placeholder: "Add participants" })) : null,
 
-      h("div", { className: "mt-6 flex gap-2" },
+      h("div", { className: "mt-6 flex gap-2 flex-wrap" },
         h(Btn, { tone: "solid", full: true, disabled: blocked, onClick: () => { if (!blocked) save(); } },
           blocked ? h("span", { className: "inline-flex items-center gap-1.5" },
             h(AlertCircle, { size: 13 }), "Blocked by a break") : "Save event"),
-        h(Btn, { onClick: p.onClose }, "Cancel"))));
+        p.canSaveTemplate && (d.title || "").trim()
+          ? h(Btn, { onClick: () => setSavingTpl(true), title: "Save this shape as a template" },
+              h(Sparkles, { size: 13 }))
+          : null,
+        h(Btn, { onClick: p.onClose }, "Cancel")),
+
+      h(ChartCalc, { open: calc, ev: d,
+        onClose: () => setCalc(false),
+        onCopy: p.onCopy,
+        onApply: (winners, scheme) => {
+          setD((x) => ({ ...x, winners, chartScheme: scheme, resultMode: "places" }));
+          setCalc(false);
+        } }),
+
+      h(SaveTemplate, { open: savingTpl, ev: d,
+        onClose: () => setSavingTpl(false),
+        onSave: (name) => { p.onSaveTemplate && p.onSaveTemplate({
+            ...d,
+            title: (d.title || "").trim(),
+            hosts: (d.hosts || []).filter(Boolean),
+            durationMin: durMin(d),
+          }, name); setSavingTpl(false); } })));
 }

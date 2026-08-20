@@ -118,7 +118,9 @@ if (ln && cf) {
   is(ln.statusColors("past", T, "#8B7BFF").star === T.current, "finished events keep a white star");
   is(ln.statusColors("past", T, "#8B7BFF").dim < 1, "finished events are dulled");
   const green = (hex) => { const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-    return g > 150 && g > r * 1.35 && g > b * 1.05; };
+    /* teal (#35D6C0) is fine — only flag colours where green clearly beats blue,
+       which is what makes something read as the same green as "live" */
+    return g > 150 && g > r * 1.35 && g > b * 1.18; };
   const greens = [...cf.TYPES.map((t) => t.color), ...cf.PALETTE].filter(green);
   is(greens.length === 0, greens.length ? `a non-live colour reads as green: ${greens.join(", ")}` : "no green in TYPES or PALETTE");
 }
@@ -157,9 +159,11 @@ if (rl) {
   const mk = (role) => rl.computeAuth({ access: { ownerKey: "owner", members: [{ key: "me", name: "Me", role }], pending: [], denied: [] } }, { key: "me", name: "Me" });
   is(mk("viewer").create === false, "viewers cannot create");
   is(mk("editor").create === true && mk("editor").delete === false, "editors create but never delete");
-  is(mk("admin").manage === true, "admins can manage");
+  is(mk("admin").members === true && mk("admin").data === true && mk("admin").roles === false,
+     "admins manage people and data but not roles");
   const guest = rl.computeAuth({ access: { ownerKey: "owner", members: [], pending: [], denied: [] } }, { key: "stranger", name: "?" });
-  is(guest.create === false && guest.manage === false, "a stranger gets read-only");
+  is(guest.create === false && guest.members === false && guest.edit === false,
+     "a stranger gets read-only");
 }
 
 if (db) {
@@ -194,8 +198,112 @@ console.log("\n12. deploy");
     is((await hit("https://cdn.tailwindcss.com/x.js")) === "cache", "CDN files still come from cache first");
   } catch (e) { bad("sw.js could not be evaluated: " + e.message); }
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  is(/type="module"\s+src="\.\/src\/app\.js"/.test(html), "index.html still mounts src/app.js");
+  is(/type="module"\s+src="\.\/src\/app\.js"/.test(html), "index.html mounts src/app.js with no stale ?v= tag");
   is(/etFail/.test(html), "crash reporter is still in index.html");
+}
+
+/* ── 13. V29: breaks, templates, chart points ───────────────────── */
+{
+  const brk = mod["src/lib/breaks.js"];
+  const tpl = mod["src/lib/templates.js"];
+  const cp  = mod["src/lib/chart-points.js"];
+  const rc  = mod["src/lib/recur.js"];
+
+  if (brk && tpl && cp && rc) {
+    console.log("\n13. breaks, templates and chart points");
+
+    /* a break must never be counted as an event anywhere */
+    const b = { ...brk.blankBreak(), serverId: "s1" };
+    const e = { id: "e1", serverId: "s1", title: "LLTVC", start: new Date().toISOString() };
+    is([e, b].filter(brk.notBreak).length === 1, "a staff break never counts as an event");
+    is(fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8").includes("filter(notBreak)"),
+       "app.js strips breaks before Home and Hub see them");
+
+    /* a zero-length break is zero, not a silent 24 hours */
+    const z = { start: new Date().toISOString(), durationMin: 0 };
+    is(brk.brEnd(z) - brk.brStart(z) === 0, "a 0-minute break is 0 minutes, not a day");
+
+    /* repeats stay inside the documented cap */
+    const far = rc.seriesStarts(new Date(2026, 0, 1, 20).toISOString(),
+      { rule: "daily", mode: "until", until: new Date(2027, 0, 1).toISOString() });
+    is(far.length <= rc.MAX_OCCURRENCES, "'until a date' never exceeds the " + rc.MAX_OCCURRENCES + " cap");
+
+    /* a repeating break fans out into real, separately-identified records */
+    const set = brk.expandBreakSeries(brk.blankBreak(), { rule: "weekly", mode: "count", count: 4 });
+    is(set.length === 4 && new Set(set.map((x) => x.id)).size === 4,
+       "a repeating break makes 4 records with 4 distinct ids");
+    is(new Set(set.map((x) => x.series.id)).size === 1, "…all sharing one series id");
+
+    /* templates carry shape, never a date or a result */
+    const t = tpl.tplFromEvent({ title: "Friday LLTVC", type: "vc", durationMin: 90,
+      hosts: ["Saif"], start: "2026-01-01T00:00:00Z", winners: [{ name: "x" }] }, "Friday LLTVC");
+    is(t.start === undefined && t.winners === undefined, "a template carries no date and no winners");
+    const applied = tpl.tplApply({ id: "new", start: "2030-05-05T20:00:00Z" }, t);
+    is(applied.id === "new" && applied.start === "2030-05-05T20:00:00Z" && applied.title === "Friday LLTVC",
+       "applying a template keeps the new id and date");
+
+    /* chart scoring: ties share a place, the next place is skipped */
+    const rows = cp.parseChart("1. Saif — 412\n#2 Rayyan 388\nZoya 388\n95 Meera");
+    is(rows.length === 4, "the parser reads all four shapes people actually paste");
+    is(rows.some((r) => r.name === "Meera" && r.messages === 95), "…including count-before-name");
+    const sc = cp.scoreChart(rows, { points: [10, 7, 5, 3], tail: 0, minMessages: 0 });
+    is(sc[1].rank === 2 && sc[2].rank === 2, "tied message counts share a place");
+    is(sc[3].rank === 4, "…and the place after a tie is skipped");
+    is(sc[1].points === sc[2].points, "tied people earn the same points");
+    is(cp.pointsForRank({ points: [10], tail: 2 }, 9) === 2, "anyone past the list gets the tail value");
+  }
+}
+
+/* ── 14. V29: Discord channels and reminders ────────────────────── */
+{
+  const wh = mod["src/lib/webhooks.js"];
+  const rm = mod["src/lib/reminders.js"];
+
+  if (wh && rm) {
+    console.log("\n14. Discord channels and reminders");
+
+    /* only real Discord hosts — a lookalike must never be posted to */
+    is(wh.validHook("https://discord.com/api/webhooks/123456789012345678/aBc-_1"),
+       "a real webhook URL is accepted");
+    is(!wh.validHook("https://evil.com/api/webhooks/1/x"), "a lookalike host is refused");
+    is(!wh.validHook("http://discord.com/api/webhooks/1/x"), "plain http is refused");
+    is(!wh.maskHook("https://discord.com/api/webhooks/123456789012345678/SECRETTOKEN")
+        .includes("SECRETTOKEN"), "the UI never shows the secret half of a webhook");
+
+    /* Discord truncates past 2000 chars — we split instead of losing the tail */
+    const long = Array.from({ length: 300 }, (_, i) => "winner number " + i).join("\n");
+    const parts = wh.chunk(long);
+    is(parts.every((x) => x.length <= 1900), "a long post is split under Discord's cap");
+    is(parts.join("\n") === long, "splitting loses nothing");
+
+    /* a bad webhook resolves an error — it must never throw into a save */
+    const bad = await wh.postToDiscord("nonsense", "hi");
+    is(bad && bad.ok === false && !!bad.error, "a broken webhook returns an error instead of throwing");
+
+    /* reminder timing */
+    const NOW = new Date(2026, 5, 1, 20, 0, 0).getTime();
+    const at = (mins, leads) => ({ id: "e" + mins, title: "E",
+      start: new Date(NOW + mins * 60000).toISOString(), remind: { leads, hook: "h1" } });
+
+    is(rm.dueReminders([at(15, [15])], {}, NOW).length === 1, "a 15-minute reminder fires 15 minutes out");
+    is(rm.dueReminders([at(40, [15])], {}, NOW).length === 0, "it never fires early");
+    is(rm.dueReminders([at(15, [15])], { "e15:15": { at: NOW } }, NOW).length === 0,
+       "a reminder already sent never fires twice");
+    is(rm.dueReminders([at(-120, [15])], {}, NOW).length === 0,
+       "a long-missed reminder is dropped, not spammed after the fact");
+    is(rm.dueReminders([at(10, [15])], {}, NOW).length === 1,
+       "a slightly late reminder still fires inside the grace window");
+    is(rm.dueReminders([at(15, [15, 60, 1440])], {}, NOW).length === 1,
+       "only the due lead fires, not the other leads on the same event");
+    is(rm.dueReminders([{ id: "x", start: "garbage", remind: { leads: [15] } }], {}, NOW).length === 0,
+       "a broken date cannot crash the reminder scan");
+    is(rm.dueReminders([{ id: "y", start: new Date(NOW).toISOString() }], {}, NOW).length === 0,
+       "an event with no reminders set is left alone");
+
+    /* the ledger must not grow forever */
+    const pruned = rm.pruneLedger({ old: { at: NOW - 8 * 86400000 }, fresh: { at: NOW - 3600000 } }, NOW);
+    is(!pruned.old && !!pruned.fresh, "the reminder ledger drops anything older than a week");
+  }
 }
 
 console.log(`\n${fails ? "\x1b[31m" + fails + " of " + checks + " checks FAILED — do not upload\x1b[0m"

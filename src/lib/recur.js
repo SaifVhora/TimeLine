@@ -49,7 +49,7 @@ export function seriesStarts(startISO, repeat) {
   if (r.mode === "until" && r.until) {
     const limit = new Date(r.until);
     limit.setHours(23, 59, 59, 999);
-    for (let i = 1; i <= MAX_OCCURRENCES; i++) {
+    for (let i = 1; i < MAX_OCCURRENCES; i++) {
       const d = step(first, r.rule, i);
       if (!d || d > limit) break;
       out.push(d);

@@ -5,7 +5,8 @@ import { newer } from "../lib/time.js";
 export const EMPTY = {
   servers: {}, events: {},
   access: { ownerKey: "", ownerName: "", ownerAvatar: null, ownerPassHash: "",
-            members: [], pending: [], denied: [], link: "", updatedAt: null },
+            members: [], pending: [], denied: [], templates: [], webhooks: [], reminded: {},
+            link: "", updatedAt: null },
 };
 
 export const configured = /^https:\/\/.+/.test(CONFIG.databaseURL) && !CONFIG.databaseURL.includes("PASTE_YOUR");
@@ -21,6 +22,9 @@ export function normalize(db) {
       members: db.access?.members || [],
       pending: db.access?.pending || [],
       denied: db.access?.denied || [],
+      templates: db.access?.templates || [],
+      webhooks: db.access?.webhooks || [],
+      reminded: db.access?.reminded || {},
     },
   };
 }

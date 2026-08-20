@@ -1,4 +1,7 @@
 import React, { h, useState, useEffect, useMemo, useCallback, useRef } from "./react.js";
+import { notBreak } from "./lib/breaks.js";
+import { useReminders } from "./store/use-reminders.js";
+import { hookList } from "./lib/webhooks.js";
 import { THEME, BODY, DISPLAY, MONO, globalCSS } from "./theme.js";
 import { ThemeCtx, useT, Btn } from "./ui/atoms.js";
 import { installGestures, enterLevel, goBack } from "./ui/gestures.js";
@@ -136,7 +139,15 @@ function App() {
   const saveMe = (v) => { cache.saveMe(v); setMe(v); };
 
   const servers = useMemo(() => Object.values(db.servers).filter((s) => !s.deleted).sort((a, b) => a.name.localeCompare(b.name)), [db]);
-  const allEvents = useMemo(() => Object.values(db.events).filter((e) => !e.deleted), [db]);
+  const allRecords = useMemo(() => Object.values(db.events).filter((e) => !e.deleted), [db]);
+  /* breaks share the events table but are never events — keep them out of every count */
+  const allEvents = useMemo(() => allRecords.filter(notBreak), [allRecords]);
+  const hooks = useMemo(() => hookList(db.access), [db]);
+
+  /* fire pre-event reminders — only for signed-in staff who can create, so a
+     read-only visitor's open tab never posts to anyone's Discord */
+  useReminders({ db, events: allEvents, apply, clientId: me.key,
+    enabled: !!(auth.registered && auth.create && hooks.length) });
   const server = servers.find((s) => s.id === serverId);
   const pendingCount = db.access.pending.length;
 
@@ -295,7 +306,7 @@ function App() {
         (view === "timeline" || view === "leaving") && server
           ? h("div", { className: "absolute inset-0 flex flex-col " + (view === "leaving" ? "" : "fadein"),
               style: { opacity: view === "leaving" ? 0 : 1, transition: "opacity .35s ease" } },
-              h(ServerView, { server, db, apply, now, auth, me, ping }))
+              h(ServerView, { server, db, apply, now, auth, me, ping, hooks }))
           : null),
 
       h("footer", { className: "shrink-0 px-4 sm:px-7 py-2 flex items-center gap-2 text-xs flex-wrap",

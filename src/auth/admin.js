@@ -7,6 +7,7 @@ import { PERMS, NO_PERMS } from "../config.js";
 import { allRoles, roleById, permsFor } from "./roles.js";
 import { RolesTab } from "./roles-tab.js";
 import { DataTab } from "./data-tab.js";
+import { Webhooks } from "./webhooks-panel.js";
 import { fingerprint, copy, appLink } from "../lib/util.js";
 import { nowISO, ago } from "../lib/time.js";
 import { Avatar } from "./avatar.js";
@@ -88,7 +89,7 @@ export function Admin(p) {
         h("div", null,
           h("div", { style: { fontFamily: DISPLAY, fontSize: 21 } }, "Admin panel"),
           h("div", { style: { fontFamily: MONO, fontSize: 9.5, color: T.muted, letterSpacing: "0.12em" } },
-            "PEOPLE \u00B7 ROLES \u00B7 INVITES \u00B7 DATA")),
+            "PEOPLE \u00B7 ROLES \u00B7 CHANNELS \u00B7 DATA")),
         h("button", { onClick: p.onClose, style: { color: T.muted, background: "none", border: "none", cursor: "pointer" } },
           h(X, { size: 19 }))),
 
@@ -98,6 +99,7 @@ export function Admin(p) {
         auth.members ? tabBtn("staff", "Staff \u00B7 " + members.length) : null,
         auth.roles ? tabBtn("roles", "Roles") : null,
         auth.members ? tabBtn("invite", "Invite") : null,
+        auth.servers ? tabBtn("channels", "Channels") : null,
         auth.data ? tabBtn("data", "Data") : null),
 
       tab === "requests" && auth.members ? h("div", null,
@@ -186,6 +188,14 @@ export function Admin(p) {
         h("div", { className: "flex gap-2 text-xs", style: { color: T.muted } },
           h(AlertCircle, { size: 13, className: "shrink-0 mt-0.5" }),
           h("span", null, "Anyone with the link can ask; nobody gets in without your tap. Names are self-declared \u2014 match the device tag against who actually messaged you.")))
+        : null,
+
+      tab === "channels" && auth.servers
+        ? h(Webhooks, { access, ping: p.ping,
+            onSave: (webhooks) => p.apply((d) => {
+              d.access = { ...d.access, webhooks };
+              return d;
+            }, "Channels updated") })
         : null,
 
       tab === "data" && auth.data ? h(DataTab, { db: p.db, apply: p.apply, ping: p.ping }) : null));

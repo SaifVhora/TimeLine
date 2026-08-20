@@ -2,18 +2,20 @@ import { h, useState, useEffect } from "../react.js";
 import { DISPLAY, MONO } from "../theme.js";
 import { useT, useInput, Btn, Label, Toggle, Chip } from "../ui/atoms.js";
 import { Modal } from "../ui/modal.js";
-import { X, Copy, Pencil, Trash, Link2, BadgeCheck, Download, Trophy, RotateCw, placeOf } from "../icons.js";
+import { X, Copy, Pencil, Trash, Link2, BadgeCheck, Download, Trophy, RotateCw, placeOf, Share2 } from "../icons.js";
 import { PALETTE } from "../config.js";
 import { exportWinnerPNG } from "../timeline/winner-png.js";
 import { fmtFull, fmtTime, fmtDay, fmtDur, countdown, MIN } from "../lib/time.js";
 import { resolveType, evShort, evColor, evHosts, evEnd, isMultiDay, statusOf, evWinners, evResultText } from "../lib/events.js";
 import { announcement } from "./announce.js";
+import { hookList, postToDiscord } from "../lib/webhooks.js";
 
 const Block = (p) => h("div", { className: "pt-4" }, h(Label, null, p.label), h("div", { className: "text-sm" }, p.children));
 
 export function Detail(p) {
   const T = useT();
   const [gfx, setGfx] = useState(false);
+  const [posting, setPosting] = useState(false);
   const ev = p.ev;
   if (!ev) return null;
   const t = resolveType(ev);
@@ -91,6 +93,17 @@ export function Detail(p) {
 
       h("div", { className: "flex gap-2 pt-5 flex-wrap" },
         h(Btn, { size: "sm", onClick: () => p.onCopy(announcement(ev)) }, h(Copy, { size: 12 }), " Copy for Discord"),
+        (p.hooks || []).length
+          ? h(Btn, { size: "sm", tone: "solid", disabled: posting,
+              onClick: async () => {
+                const hook = p.hooks.find((w) => w.id === (ev.remind && ev.remind.hook)) || p.hooks[0];
+                setPosting(true);
+                const r = await postToDiscord(hook.url, announcement(ev));
+                setPosting(false);
+                p.onPing(r.ok ? "Posted to " + hook.name : r.error, !r.ok);
+              } },
+              h(Share2, { size: 12 }), posting ? " Posting\u2026" : " Post to Discord")
+          : null,
         (winners.length || resultText) ? h(Btn, { size: "sm", tone: "gold", onClick: () => setGfx(true) },
           h(Trophy, { size: 12 }), " Winner graphic") : null,
         p.perms.edit ? h(Btn, { size: "sm", onClick: () => p.onEdit(ev) }, h(Pencil, { size: 12 }), " Edit") : null,

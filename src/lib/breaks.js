@@ -6,12 +6,14 @@
 import { MIN, fmtD, fmtDay, fmtTime, sameDay } from "./time.js";
 import { TYPES } from "../config.js";
 import { uid } from "./util.js";
+import { seriesStarts } from "./recur.js";
 
 export const isBreak = (e) => !!e && e.kind === "break";
 export const notBreak = (e) => !isBreak(e);
 
 export const brStart = (b) => new Date(b.start).getTime();
-export const brEnd = (b) => brStart(b) + (b.durationMin || 1440) * MIN;
+export const brEnd = (b) =>
+  brStart(b) + (b.durationMin == null ? 1440 : Math.max(0, b.durationMin)) * MIN;
 
 export const blankBreak = () => {
   const s = new Date();
@@ -21,8 +23,26 @@ export const blankBreak = () => {
     id: uid(), kind: "break", title: "Staff break",
     start: s.toISOString(), durationMin: 1440 * 3,
     scope: "all", types: [], reason: "",
+    repeat: { rule: "none", mode: "count", count: 8, until: null },
   };
 };
+
+/* A repeating break fans out the same way a repeating event does: every
+   occurrence is a real record sharing a series id, so conflict detection,
+   the calendar and the timeline curtain need to know nothing about repeats. */
+export function expandBreakSeries(base, repeat) {
+  const starts = seriesStarts(base.start, repeat);
+  if (starts.length <= 1) return [{ ...base, series: null }];
+  const seriesId = (base.series && base.series.id) || uid();
+  const meta = { id: seriesId, rule: repeat.rule, mode: repeat.mode,
+                 count: repeat.count || null, until: repeat.until || null };
+  return starts.map((d, i) => ({
+    ...base,
+    id: i === 0 ? base.id : uid(),
+    start: d.toISOString(),
+    series: { ...meta, index: i, of: starts.length },
+  }));
+}
 
 /* does this break stand in the way of an event of this type? */
 export const brCovers = (b, typeId) =>

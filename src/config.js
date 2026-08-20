@@ -15,7 +15,8 @@ export const TYPES = [
 /* events made before the type rename map onto the new ones */
 export const LEGACY_TYPE = { lltvc: "vc", karaoke: "vc", gtac: "channel", chart: "channel", auction: "server" };
 
-export const PALETTE = ["#8B7BFF", "#35D6C0", "#E8C87A", "#FF9F6B", "#FF7BD5", "#6BE3B8", "#7BC5FF", "#FF7285"];
+/* #6BE3B8 is deliberately absent — that green is reserved for "live" */
+export const PALETTE = ["#8B7BFF", "#35D6C0", "#E8C87A", "#FF9F6B", "#FF7BD5", "#A88BFF", "#7BC5FF", "#FF7285"];
 
 /* every power someone can be given, with a plain-English label */
 export const PERMS = [

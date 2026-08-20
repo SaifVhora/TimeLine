@@ -6,6 +6,7 @@ import { X, Hourglass, Trash } from "../icons.js";
 import { TYPES } from "../config.js";
 import { MIN, DAY, startOfDay, fmtD } from "../lib/time.js";
 import { brStart, brEnd, brWho } from "../lib/breaks.js";
+import { RULES, blankRepeat, repeatSummary, seriesStarts } from "../lib/recur.js";
 
 /* Breaks run in whole days — nobody schedules a break for 90 minutes. */
 export function BreakEditor(p) {
@@ -21,12 +22,16 @@ export function BreakEditor(p) {
       last: startOfDay(brEnd(p.brk) - MIN),
       scope: p.brk.scope || "all",
       types: p.brk.types || [],
+      repeat: p.brk.repeat && p.brk.repeat.rule ? p.brk.repeat : blankRepeat(),
+      scopeEdit: "one",
     });
   }, [p.brk]);
 
   if (!d) return null;
 
   const set = (k, v) => setD((x) => ({ ...x, [k]: v }));
+  const setR = (k, v) => setD((x) => ({ ...x, repeat: { ...x.repeat, [k]: v } }));
+  const inSeries = !!(p.brk && p.brk.series && p.brk.series.id);
   const days = Math.max(1, Math.round((d.last - d.first) / DAY) + 1);
 
   const shiftFirst = (n) => setD((x) => {
@@ -50,6 +55,9 @@ export function BreakEditor(p) {
       scope: d.scope,
       types: d.scope === "types" ? (d.types || []) : [],
       reason: (d.reason || "").trim(),
+      repeat: d.repeat && d.repeat.rule !== "none" ? d.repeat : null,
+      series: d.series || null,
+      _scope: inSeries ? (d.scopeEdit || "one") : "one",
     });
   };
 
@@ -101,6 +109,40 @@ export function BreakEditor(p) {
             : h("div", { className: "text-xs", style: { color: T.muted } },
                 "Nothing at all can be scheduled inside this range.")),
 
+        /* ── repeats ── */
+        inSeries ? null : h("div", { className: "pt-1", style: { borderTop: "1px solid " + T.hair } },
+          h("div", { className: "pt-3" },
+            h(Label, null, "Repeats"),
+            h("div", { className: "flex gap-1.5 flex-wrap" }, RULES.map((r) =>
+              h(Chip, { key: r.id, on: (d.repeat && d.repeat.rule || "none") === r.id,
+                onClick: () => setR("rule", r.id) }, r.label))),
+            d.repeat && d.repeat.rule !== "none" ? h("div", { className: "mt-3 space-y-2.5" },
+              h("div", { className: "flex gap-1.5 flex-wrap" },
+                h(Chip, { on: d.repeat.mode !== "until", onClick: () => setR("mode", "count") }, "A SET NUMBER OF TIMES"),
+                h(Chip, { on: d.repeat.mode === "until", onClick: () => setR("mode", "until") }, "UNTIL A DATE")),
+              d.repeat.mode === "until"
+                ? h("div", { className: "flex items-center gap-1.5" },
+                    h("button", { onClick: () => setR("until", (d.repeat.until || d.last) - 7 * DAY), style: stepBtn(T) }, "\u2039"),
+                    h("div", { className: "flex-1 text-center py-2 rounded-lg",
+                      style: { background: T.field, border: "1px solid " + T.hair, fontFamily: DISPLAY, fontSize: 15 } },
+                      fmtD(d.repeat.until || d.last)),
+                    h("button", { onClick: () => setR("until", (d.repeat.until || d.last) + 7 * DAY), style: stepBtn(T) }, "\u203A"))
+                : h("div", { className: "flex gap-1.5 flex-wrap" }, [2, 4, 6, 8, 12].map((n) =>
+                    h(Chip, { key: n, on: Number(d.repeat.count) === n, onClick: () => setR("count", n) }, n + "\u00D7"))),
+              h("div", { className: "px-3 py-2 rounded-lg", style: { background: T.field, border: "1px solid " + T.hair } },
+                h("div", { style: { fontFamily: MONO, fontSize: 10, color: T.muted } }, "THIS CREATES"),
+                h("div", { className: "text-sm" },
+                  seriesStarts(new Date(d.first).toISOString(), d.repeat).length + " breaks \u00B7 " +
+                  repeatSummary(d.repeat).replace(/^Repeats /, "").replace(/\.$/, "")))) : null)),
+
+        /* ── editing one of a repeating set ── */
+        inSeries ? h("div", { className: "pt-3", style: { borderTop: "1px solid " + T.hair } },
+          h(Label, null, "This is one of a repeating set"),
+          h("div", { className: "flex gap-1.5 flex-wrap" },
+            h(Chip, { on: (d.scopeEdit || "one") === "one", onClick: () => set("scopeEdit", "one") }, "THIS ONE ONLY"),
+            h(Chip, { on: d.scopeEdit === "later", onClick: () => set("scopeEdit", "later") }, "THIS AND LATER"),
+            h(Chip, { on: d.scopeEdit === "all", onClick: () => set("scopeEdit", "all") }, "THE WHOLE SET"))) : null,
+
         h(Field, { label: "Reason", hint: "Shown to anyone who tries to schedule into it" },
           h("input", { style: input, value: d.reason, maxLength: 90,
             onChange: (e) => set("reason", e.target.value),
@@ -109,7 +151,9 @@ export function BreakEditor(p) {
       h("div", { className: "mt-6 flex gap-2" },
         h(Btn, { tone: "solid", full: true, onClick: save }, "Save break"),
         p.onDelete && p.brk && p.brk.createdAt
-          ? h(Btn, { tone: "danger", onClick: () => p.onDelete(p.brk) }, h(Trash, { size: 13 }))
+          ? h(Btn, { tone: "danger", onClick: () => p.onDelete(p.brk, inSeries && d.scopeEdit === "all") },
+              h(Trash, { size: 13 }),
+              inSeries && d.scopeEdit === "all" ? " SET" : "")
           : null,
         h(Btn, { onClick: p.onClose }, "Cancel"))));
 }

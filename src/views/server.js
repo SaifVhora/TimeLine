@@ -17,7 +17,9 @@ import { StandingsPage } from "./standings.js";
 import { Detail } from "../events/detail.js";
 import { Editor, blankEvent } from "../events/editor.js";
 import { BreakEditor } from "../events/break-editor.js";
-import { isBreak, notBreak, blankBreak } from "../lib/breaks.js";
+import { isBreak, notBreak, blankBreak, expandBreakSeries, brStart } from "../lib/breaks.js";
+import { TemplatePicker } from "../events/templates-modal.js";
+import { tplFromEvent, tplApply, tplList, MAX_TEMPLATES } from "../lib/templates.js";
 import { expandSeries, applyToSibling } from "../lib/recur.js";
 
 export function ServerView(p) {
@@ -29,6 +31,7 @@ export function ServerView(p) {
   const [detail, setDetail] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   const [editingBreak, setEditingBreak] = useState(null);
+  const [picking, setPicking] = useState(null);   /* null | {onDay} */
 
   const all = useMemo(
     () => Object.values(p.db.events).filter((e) => !e.deleted && e.serverId === p.server.id),
@@ -66,11 +69,15 @@ export function ServerView(p) {
     let msg = exists ? "Event updated" : "Event added";
 
     p.apply((d) => {
-      /* a brand-new event with a repeat rule fans out into real occurrences */
-      if (!exists && repeat && repeat.rule && repeat.rule !== "none") {
+      /* a repeat rule fans out into real occurrences — on create, and also when
+         a rule is put on an existing one-off for the first time */
+      const alreadySeries = !!(ev.series && ev.series.id);
+      if (repeat && repeat.rule && repeat.rule !== "none" && !alreadySeries) {
         const set = expandSeries(ev, repeat);
         set.forEach((one) => stamp(d, one));
-        msg = set.length + " events added \u2014 the whole set is on the line";
+        msg = exists
+          ? "Now repeating \u2014 " + (set.length - 1) + " more added to the line"
+          : set.length + " events added \u2014 the whole set is on the line";
         return d;
       }
 
@@ -92,17 +99,54 @@ export function ServerView(p) {
     setEditing(null);
   };
 
-  const saveBreak = (brk) => {
+  const saveBreak = (raw) => {
+    const { _scope, ...brk } = raw;
     const exists = !!p.db.events[brk.id];
-    p.apply((d) => { stamp(d, brk); return d; }, exists ? "Break updated" : "Break added \u2014 nothing can be scheduled inside it");
+    const repeat = brk.repeat;
+    const alreadySeries = !!(brk.series && brk.series.id);
+    let msg = exists ? "Break updated" : "Break added \u2014 nothing can be scheduled inside it";
+
+    p.apply((d) => {
+      if (repeat && repeat.rule && repeat.rule !== "none" && !alreadySeries) {
+        const set = expandBreakSeries(brk, repeat);
+        set.forEach((one) => stamp(d, one));
+        msg = set.length + " breaks added \u2014 the whole set is blocked off";
+        return d;
+      }
+
+      stamp(d, brk);
+
+      /* editing one of a repeating set can carry the change to its siblings */
+      if (exists && _scope && _scope !== "one" && alreadySeries) {
+        const mine = Object.values(d.events).filter((x) =>
+          !x.deleted && isBreak(x) && x.series && x.series.id === brk.series.id && x.id !== brk.id);
+        const from = brStart(brk);
+        const targets = _scope === "all" ? mine : mine.filter((x) => brStart(x) > from);
+        targets.forEach((sib) => {
+          /* each occurrence keeps its own dates; everything else travels */
+          d.events[sib.id] = { ...sib, title: brk.title, durationMin: brk.durationMin,
+            scope: brk.scope, types: brk.types, reason: brk.reason,
+            updatedAt: nowISO(), updatedBy: p.me.name };
+        });
+        if (targets.length) msg = "Updated this and " + targets.length + " other" + (targets.length === 1 ? "" : "s") + " in the set";
+      }
+      return d;
+    }, msg);
     setEditingBreak(null);
   };
 
-  const deleteBreak = (brk) => {
+  const deleteBreak = (brk, wholeSeries) => {
     p.apply((d) => {
-      if (d.events[brk.id]) d.events[brk.id] = { ...d.events[brk.id], deleted: true, updatedAt: nowISO(), updatedBy: p.me.name };
+      const kill = (x) => { d.events[x.id] = { ...x, deleted: true, updatedAt: nowISO(), updatedBy: p.me.name }; };
+      if (!d.events[brk.id]) return d;
+      kill(d.events[brk.id]);
+      if (wholeSeries && brk.series && brk.series.id) {
+        Object.values(d.events)
+          .filter((x) => !x.deleted && isBreak(x) && x.series && x.series.id === brk.series.id)
+          .forEach(kill);
+      }
       return d;
-    }, "Break removed");
+    }, wholeSeries ? "Whole set of breaks removed" : "Break removed");
     setEditingBreak(null);
   };
 
@@ -122,11 +166,32 @@ export function ServerView(p) {
     setConfirmDel(null); setDetail(null);
   };
 
-  const addBlank = () => setEditing(blankEvent());
-  const addOnDay = (dayMs) => {
+  /* every "add" goes through the picker first, unless there are no templates yet */
+  const startFrom = (tpl, dayMs) => {
     const b = blankEvent();
-    const s = new Date(dayMs); s.setHours(20, 0, 0, 0);
-    setEditing({ ...b, start: s.toISOString() });
+    if (dayMs != null) { const s = new Date(dayMs); s.setHours(20, 0, 0, 0); b.start = s.toISOString(); }
+    setEditing(tpl ? tplApply(b, tpl) : b);
+    setPicking(null);
+  };
+  const addBlank = () =>
+    tplList(p.db.access).length ? setPicking({ onDay: null }) : startFrom(null, null);
+  const addOnDay = (dayMs) =>
+    tplList(p.db.access).length ? setPicking({ onDay: dayMs }) : startFrom(null, dayMs);
+
+  const saveTemplate = (ev, name) => {
+    const existing = tplList(p.db.access);
+    if (existing.length >= MAX_TEMPLATES) return;
+    p.apply((d) => {
+      d.access = { ...d.access, templates: [...((d.access && d.access.templates) || []), tplFromEvent(ev, name)] };
+      return d;
+    }, "Template saved \u2014 it's there next time you add an event");
+  };
+
+  const deleteTemplate = (tpl) => {
+    p.apply((d) => {
+      d.access = { ...d.access, templates: ((d.access && d.access.templates) || []).filter((t) => t.id !== tpl.id) };
+      return d;
+    }, "Template deleted");
   };
 
   /* if rights change while you're on a staff page, fall back to the timeline */
@@ -153,9 +218,17 @@ export function ServerView(p) {
     h(Detail, { ev: detail, now: p.now, names, onClose: () => setDetail(null),
       serverName: p.server.name, onPing: p.ping,
       perms: { edit: canEditEvent(p.auth, detail, p.me), delete: p.auth.delete },
-      onEdit: (e) => { setDetail(null); setEditing(e); }, onDelete: setConfirmDel, onCopy: (t) => copy(t, p.ping) }),
+      onEdit: (e) => { setDetail(null); setEditing(e); }, onDelete: setConfirmDel, onCopy: (t) => copy(t, p.ping),
+      hooks: p.hooks }),
 
-    h(Editor, { ev: editing, onClose: () => setEditing(null), onSave: saveEvent, names, breaks }),
+    h(TemplatePicker, { open: !!picking, access: p.db.access,
+      onClose: () => setPicking(null),
+      onPick: (t) => startFrom(t, picking && picking.onDay),
+      onDelete: p.auth.create ? deleteTemplate : null }),
+
+    h(Editor, { ev: editing, onClose: () => setEditing(null), onSave: saveEvent, names, breaks,
+      canSaveTemplate: p.auth.create && tplList(p.db.access).length < MAX_TEMPLATES,
+      onSaveTemplate: saveTemplate, onCopy: (t) => copy(t, p.ping), hooks: p.hooks }),
 
     h(BreakEditor, { brk: editingBreak, onClose: () => setEditingBreak(null),
       onSave: saveBreak, onDelete: p.auth.delete ? deleteBreak : null }),
