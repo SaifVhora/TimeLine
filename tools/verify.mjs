@@ -306,6 +306,26 @@ console.log("\n12. deploy");
   }
 }
 
+/* ── 15. the app can actually render ────────────────────────────── */
+{
+  console.log("\n15. render safety");
+  const app = fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8");
+
+  /* `me` is null until someone signs in, so every use of it during render has
+     to be guarded. This exact bug shipped a blank screen once — see the note
+     in tools/smoke.mjs for the render test that caught it. */
+  const remCall = (app.match(/useReminders\(\{[\s\S]*?\}\);/) || [""])[0];
+  is(remCall.includes("me && me.key"), "the reminder hook guards a null `me`");
+  is(/enabled:\s*!!\(\s*me && me\.key/.test(remCall), "…and cannot enable itself without one");
+
+  const rem = fs.readFileSync(path.join(ROOT, "src/store/use-reminders.js"), "utf8");
+  is(/if \(!enabled \|\| !clientId\)/.test(rem), "the hook itself also refuses to run without an id");
+
+  is(/export const BUILD = 29/.test(app), "BUILD says 29");
+  const sw = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
+  is(sw.includes("events-timeline-v29"), "the service worker cache is bumped to match");
+}
+
 console.log(`\n${fails ? "\x1b[31m" + fails + " of " + checks + " checks FAILED — do not upload\x1b[0m"
   : "\x1b[32mall " + checks + " checks passed — safe to upload\x1b[0m"}\n`);
 process.exit(fails ? 1 : 0);

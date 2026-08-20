@@ -28,7 +28,9 @@ export function useReminders({ db, events, apply, clientId, enabled }) {
   applyRef.current = apply;
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    /* no signed-in identity means no claim can be made, so there is nothing
+       safe to do — belt and braces on top of the caller's own guard */
+    if (!enabled || !clientId) return undefined;
     let stopped = false;
 
     const record = (key, val) => applyRef.current((d) => {

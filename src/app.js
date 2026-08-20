@@ -19,7 +19,7 @@ import { hashPass, newKey, uid, appLink } from "./lib/util.js";
 import { nowISO, ago } from "./lib/time.js";
 import { Setup } from "./views/setup.js";
 
-export const BUILD = 28;
+export const BUILD = 29;
 
 
 
@@ -146,8 +146,8 @@ function App() {
 
   /* fire pre-event reminders — only for signed-in staff who can create, so a
      read-only visitor's open tab never posts to anyone's Discord */
-  useReminders({ db, events: allEvents, apply, clientId: me.key,
-    enabled: !!(auth.registered && auth.create && hooks.length) });
+  useReminders({ db, events: allEvents, apply, clientId: me && me.key,
+    enabled: !!(me && me.key && auth.registered && auth.create && hooks.length) });
   const server = servers.find((s) => s.id === serverId);
   const pendingCount = db.access.pending.length;
 
